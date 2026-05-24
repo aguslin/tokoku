@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingCart, Zap, Truck, Shield, Sparkles, ArrowRight, Heart } from 'lucide-react';
-import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { Badge } from '@/components/shared/badge';
 import { RatingStars } from '@/components/shared/rating-stars';
@@ -13,6 +12,11 @@ import { translations } from '@/lib/i18n/id';
 import { formatCurrency } from '@/lib/utils/currency';
 import { MOCK_PRODUCTS, MOCK_CATEGORIES, MOCK_TESTIMONIALS } from '@/lib/mock-data/products';
 import { useAuthStore } from '@/lib/store';
+
+const btnPrimary = 'inline-flex items-center justify-center gap-2 font-medium rounded-md transition-all duration-200 px-4 py-2.5 text-sm h-10 bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80';
+const btnOutline = 'inline-flex items-center justify-center gap-2 font-medium rounded-md transition-all duration-200 px-4 py-2.5 text-sm h-10 border border-input bg-background text-foreground hover:bg-muted active:bg-muted/80';
+const btnPrimaryLg = 'inline-flex items-center justify-center gap-2 font-medium rounded-md transition-all duration-200 px-6 py-3 text-base h-12 bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80';
+const btnOutlineLg = 'inline-flex items-center justify-center gap-2 font-medium rounded-md transition-all duration-200 px-6 py-3 text-base h-12 border border-input bg-background text-foreground hover:bg-muted active:bg-muted/80';
 
 export default function PreLoginPage() {
   const router = useRouter();
@@ -23,14 +27,6 @@ export default function PreLoginPage() {
       router.replace('/marketplace');
     }
   }, [isAuthenticated, router]);
-
-  const handleRegister = () => {
-    router.push('/register');
-  };
-
-  const handleLogin = () => {
-    router.push('/login');
-  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -44,12 +40,12 @@ export default function PreLoginPage() {
             <span className="font-bold text-lg text-foreground">Shop</span>
           </Link>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleLogin}>
+            <Link href="/login" className={btnOutline}>
               {translations.auth.login}
-            </Button>
-            <Button onClick={handleRegister}>
+            </Link>
+            <Link href="/register" className={btnPrimary}>
               {translations.auth.register}
-            </Button>
+            </Link>
           </div>
         </div>
       </nav>
@@ -72,12 +68,14 @@ export default function PreLoginPage() {
                 {translations.preLogin.description}
               </p>
               <div className="flex gap-3 flex-wrap">
-                <Button size="lg" icon={<ShoppingCart className="w-5 h-5" />} onClick={handleRegister}>
+                <Link href="/register" className={btnPrimaryLg}>
+                  <ShoppingCart className="w-5 h-5" />
                   {translations.preLogin.registerButton}
-                </Button>
-                <Button variant="outline" size="lg" icon={<ArrowRight className="w-5 h-5" />} onClick={handleLogin}>
+                </Link>
+                <Link href="/login" className={btnOutlineLg}>
+                  <ArrowRight className="w-5 h-5" />
                   {translations.preLogin.loginButton}
-                </Button>
+                </Link>
               </div>
             </div>
             <div className="relative h-96 hidden lg:block">
@@ -287,12 +285,12 @@ export default function PreLoginPage() {
             Daftarkan akun Anda sekarang dan nikmati pengalaman belanja yang luar biasa dengan ribuan produk pilihan
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
-            <Button size="lg" onClick={handleRegister}>
+            <Link href="/register" className={btnPrimaryLg}>
               Daftar Sekarang
-            </Button>
-            <Button size="lg" variant="outline" onClick={handleLogin}>
+            </Link>
+            <Link href="/login" className={btnOutlineLg}>
               Sudah Punya Akun? Masuk
-            </Button>
+            </Link>
           </div>
         </div>
       </section>

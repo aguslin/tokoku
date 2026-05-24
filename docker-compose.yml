@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  marketplace:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marketplace-v2
+    ports:
+      - "3001:3000"
+    restart: unless-stopped
