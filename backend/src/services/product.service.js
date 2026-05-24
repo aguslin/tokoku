@@ -97,6 +97,27 @@ const getById = async (id) => {
 };
 
 const create = async (data, sellerId) => {
+  // Generate slug from name if not provided
+  if (!data.slug && data.name) {
+    let slug = data.name
+      .toLowerCase()
+      .trim()
+      .replace(/[^\w\s-]/g, '') // Remove special characters
+      .replace(/\s+/g, '-') // Replace spaces with hyphens
+      .replace(/-+/g, '-'); // Replace multiple hyphens with single hyphen
+    
+    // Check if slug already exists and make it unique if needed
+    let uniqueSlug = slug;
+    let counter = 1;
+    let existing = await Product.findOne({ where: { slug: uniqueSlug } });
+    while (existing) {
+      uniqueSlug = `${slug}-${counter}`;
+      counter++;
+      existing = await Product.findOne({ where: { slug: uniqueSlug } });
+    }
+    data.slug = uniqueSlug;
+  }
+
   if (data.slug) {
     const existing = await Product.findOne({ where: { slug: data.slug } });
     if (existing) {

@@ -1,36 +1,64 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingCart, Heart, Search, Filter } from 'lucide-react';
+import { ShoppingCart, Heart, Search, Filter, Loader2 } from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { Badge } from '@/components/shared/badge';
 import { RatingStars } from '@/components/shared/rating-stars';
 import { formatCurrency } from '@/lib/utils/currency';
-import { MOCK_PRODUCTS, MOCK_CATEGORIES } from '@/lib/mock-data/products';
 import { useCartStore, useWishlistStore } from '@/lib/store';
+
+function getImageUrl(product: any): string {
+  if (product.ProductImages?.length > 0) {
+    const primary = product.ProductImages.find((i: any) => i.isPrimary) || product.ProductImages[0];
+    return primary.url.startsWith('http') ? primary.url : primary.url;
+  }
+  return '/placeholder.svg';
+}
 
 export default function MarketplacePage() {
   const [searchQuery, setSearchQuery] = useState('');
+  const [products, setProducts] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const { addItem } = useCartStore();
   const { addItem: addWishlist, removeItem: removeWishlist, isInWishlist } = useWishlistStore();
 
-  const filteredProducts = MOCK_PRODUCTS.filter(p =>
-    p.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+        const res = await fetch(`${apiUrl}/products?limit=50`);
+        const json = await res.json();
+        if (json.success && json.data?.products) {
+          setProducts(json.data.products);
+        }
+      } catch (e) {
+        console.error('Failed to fetch products', e);
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  const filteredProducts = products.filter(p => {
+    if (!p?.name) return false;
+    return p.name.toLowerCase().includes(searchQuery.toLowerCase());
+  });
 
   const handleAddToCart = (product: any) => {
     addItem({
       id: `${product.id}-${Date.now()}`,
       productId: product.id,
       productName: product.name,
-      productImage: product.image,
-      price: product.price,
+      productImage: getImageUrl(product),
+      price: Number(product.price),
       quantity: 1,
-      sellerName: product.seller.name,
-      sellerVerified: product.seller.verified,
+      sellerName: product.seller?.name || 'Toko',
+      sellerVerified: true,
     });
   };
 
@@ -41,8 +69,8 @@ export default function MarketplacePage() {
       addWishlist({
         productId: product.id,
         productName: product.name,
-        productImage: product.image,
-        price: product.price,
+        productImage: getImageUrl(product),
+        price: Number(product.price),
       });
     }
   };
@@ -62,29 +90,11 @@ export default function MarketplacePage() {
                 className="w-full pl-10 pr-4 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <Button variant="outline" icon={<Filter className="w-4 h-4" />}>
-              Filter
-            </Button>
           </div>
         </div>
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <h2 className="text-lg font-semibold text-foreground mb-4">Kategori</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-            {MOCK_CATEGORIES.map((cat) => (
-              <div
-                key={cat.id}
-                className="p-3 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer text-center"
-              >
-                <div className="text-2xl mb-1">{cat.icon}</div>
-                <p className="font-medium text-foreground text-xs">{cat.name}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
         <div>
           <div className="flex justify-between items-center mb-6">
             <h2 className="text-xl font-bold text-foreground">
@@ -92,42 +102,28 @@ export default function MarketplacePage() {
             </h2>
           </div>
 
-          {filteredProducts.length === 0 ? (
+          {loading ? (
+            <div className="flex justify-center py-16">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : filteredProducts.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-muted-foreground">Tidak ada produk yang ditemukan</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               {filteredProducts.map((product) => (
-                <Card key={product.id} hoverable className="overflow-hidden flex flex-col">
-                  <Link href={`/marketplace/${product.id}`}>
+                <Card key={product.id} hoverable className="overflow-hidden flex flex-col relative">
+                  <Link href={`/marketplace/${product.slug || product.id}`}>
                     <div className="relative h-48 bg-muted mb-4 -mx-4 -mt-4 -mb-4">
                       <div className="absolute inset-0">
                         <Image
-                          src={product.image}
+                          src={getImageUrl(product)}
                           alt={product.name}
                           fill
                           className="object-cover"
                         />
                       </div>
-                      {product.badge && (
-                        <Badge
-                          variant={
-                            product.badge === 'flash-sale'
-                              ? 'destructive'
-                              : product.badge === 'trending'
-                              ? 'warning'
-                              : 'info'
-                          }
-                          className="absolute top-2 right-2"
-                        >
-                          {product.badge === 'flash-sale'
-                            ? 'Flash Sale'
-                            : product.badge === 'trending'
-                            ? 'Trending'
-                            : 'Baru'}
-                        </Badge>
-                      )}
                     </div>
                   </Link>
 
@@ -144,25 +140,25 @@ export default function MarketplacePage() {
                     />
                   </button>
 
-                  <Link href={`/marketplace/${product.id}`} className="flex-1">
+                  <Link href={`/marketplace/${product.slug || product.id}`} className="flex-1">
                     <div className="space-y-2">
-                      <p className="text-xs text-muted-foreground">{product.seller.name}</p>
+                      <p className="text-xs text-muted-foreground">{product.seller?.name || 'Toko'}</p>
                       <h3 className="font-semibold text-foreground line-clamp-2 text-sm">{product.name}</h3>
-                      <RatingStars rating={product.rating} size="sm" />
-                      <p className="text-xs text-muted-foreground">{product.reviewCount} ulasan</p>
+                      {product.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2">{product.description}</p>
+                      )}
                     </div>
 
                     <div className="mt-3 space-y-2">
                       <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-bold text-primary">{formatCurrency(product.price)}</span>
-                        {product.originalPrice && (
+                        <span className="text-lg font-bold text-primary">{formatCurrency(Number(product.price))}</span>
+                        {product.comparePrice && Number(product.comparePrice) > 0 && (
                           <span className="text-sm text-muted-foreground line-through">
-                            {formatCurrency(product.originalPrice)}
+                            {formatCurrency(Number(product.comparePrice))}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">{product.sold} terjual</p>
-                      <p className="text-xs text-success">Pengiriman dalam {product.deliveryDays} hari</p>
+                      <p className="text-xs text-muted-foreground">Stok: {product.stock}</p>
                     </div>
                   </Link>
 

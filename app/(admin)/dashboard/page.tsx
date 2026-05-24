@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Users, ShoppingBag, Package, FolderTree, Ticket,
-  Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown
+  Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown, Loader2
 } from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
@@ -400,25 +400,88 @@ function CategoriesSection({ data, loading, error, refetch, search, setSearch }:
   );
 }
 
+function getProductImageUrl(p: any): string {
+  const img = p.ProductImages?.find((i: any) => i.isPrimary) || p.ProductImages?.[0];
+  if (!img) return '';
+  return img.url.startsWith('http') ? img.url : img.url;
+}
+
 function ProductsSection({ data, loading, error, refetch, search, setSearch, categories }: any) {
   const [show, setShow] = useState(false);
   const [edit, setEdit] = useState<any>(null);
-  const [form, setForm] = useState({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', isActive: true, isFeatured: false, categoryId: '' });
+  const [form, setForm] = useState({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', weight: 0, isActive: true, isFeatured: false, categoryId: '' });
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadedImages, setUploadedImages] = useState<string[]>([]);
 
   const filtered = (data || []).filter((p: Product) =>
     p.name?.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openCreate = () => { setEdit(null); setForm({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', isActive: true, isFeatured: false, categoryId: '' }); setShow(true); };
-  const openEdit = (p: Product) => { setEdit(p); setForm({ name: p.name, slug: p.slug, description: '', price: p.price, comparePrice: 0, stock: p.stock, sku: p.sku || '', isActive: p.isActive, isFeatured: p.isFeatured, categoryId: p.categoryId || '' }); setShow(true); };
+  const openCreate = () => {
+    setEdit(null);
+    setForm({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', weight: 0, isActive: true, isFeatured: false, categoryId: '' });
+    setUploadedImages([]);
+    setShow(true);
+  };
+
+  const openEdit = (p: Product) => {
+    setEdit(p);
+    setForm({ name: p.name, slug: p.slug, description: p.description || '', price: p.price, comparePrice: p.comparePrice || 0, stock: p.stock, sku: p.sku || '', weight: p.weight || 0, isActive: p.isActive, isFeatured: p.isFeatured, categoryId: p.categoryId || '' });
+    const existing = (p.ProductImages || []).map((i: any) => i.url);
+    setUploadedImages(existing);
+    setShow(true);
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      for (const f of files) formData.append('images', f);
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+      const token = localStorage.getItem('admin-token');
+      const res = await fetch(`${apiUrl}/upload/images`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+      const json = await res.json();
+      if (json.success && json.data) {
+        const urls = json.data.map((f: any) => f.url);
+        setUploadedImages(prev => [...prev, ...urls]);
+      }
+    } catch (err) {
+      console.error('Upload failed', err);
+    } finally {
+      setUploading(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
+  const removeImage = (url: string) => {
+    setUploadedImages(prev => prev.filter(u => u !== url));
+  };
 
   const handleSave = async () => {
     setSaving(true);
-    const p = { ...form, slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'), price: Number(form.price), stock: Number(form.stock) };
-    if (edit) await adminApi.put(`/products/${edit.id}`, p);
-    else await adminApi.post('/products', p);
+    const payload = {
+      ...form,
+      categoryId: form.categoryId || null,
+      slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'),
+      price: Number(form.price),
+      comparePrice: Number(form.comparePrice) || null,
+      stock: Number(form.stock),
+      images: uploadedImages.map((url, i) => ({
+        url,
+        isPrimary: i === 0,
+        sortOrder: i,
+      })),
+    };
+    if (edit) await adminApi.put(`/products/${edit.id}`, payload);
+    else await adminApi.post('/products', payload);
     setSaving(false); setShow(false); refetch();
   };
 
@@ -443,7 +506,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-sky-50">
-                <th className="px-3 py-2.5 text-left font-semibold">Nama</th>
+                <th className="px-3 py-2.5 text-left font-semibold">Produk</th>
                 <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Harga</th>
                 <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Stok</th>
                 <th className="px-3 py-2.5 text-left font-semibold hidden md:table-cell">Status</th>
@@ -454,12 +517,21 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
               {filtered.map((p: Product) => (
                 <tr key={p.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
                   <td className="px-3 py-2.5">
-                    <div className="min-w-0">
-                      <p className="font-medium text-foreground truncate">{p.name}</p>
-                      <p className="text-xs text-muted-foreground">{p.sku || '-'}</p>
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-lg bg-muted overflow-hidden shrink-0">
+                        {getProductImageUrl(p) ? (
+                          <img src={getProductImageUrl(p)} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs">No img</div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{p.name}</p>
+                        <p className="text-xs text-muted-foreground">{p.sku || '-'}</p>
+                      </div>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {p.price.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {Number(p.price).toLocaleString()}</td>
                   <td className="px-3 py-2.5 hidden sm:table-cell">
                     <span className={p.stock < 10 ? 'text-destructive font-medium' : ''}>{p.stock}</span>
                   </td>
@@ -483,15 +555,26 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
         <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {(data || []).length} produk</div>
       </div>
       <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Produk' : 'Tambah Produk'} onSave={handleSave} saving={saving}>
-        <div className="space-y-3">
+        <div className="space-y-3 max-h-[70vh] overflow-y-auto">
           <div className="grid grid-cols-2 gap-3">
             <InputField label="Nama" value={form.name} onChange={v => { setForm(f => ({ ...f, name: v })); if (!edit) setForm(f => ({ ...f, slug: v.toLowerCase().replace(/\s+/g, '-') })); }} />
             <InputField label="SKU" value={form.sku} onChange={v => setForm(f => ({ ...f, sku: v }))} />
           </div>
           <InputField label="Slug" value={form.slug} onChange={v => setForm(f => ({ ...f, slug: v }))} />
+          <div>
+            <label className="block text-sm font-medium mb-1">Deskripsi</label>
+            <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+              rows={3}
+              className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+              placeholder="Deskripsi produk..." />
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <InputField label="Harga" type="number" value={String(form.price)} onChange={v => setForm(f => ({ ...f, price: Number(v) }))} />
+            <InputField label="Harga Asli" type="number" value={String(form.comparePrice)} onChange={v => setForm(f => ({ ...f, comparePrice: Number(v) }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <InputField label="Stok" type="number" value={String(form.stock)} onChange={v => setForm(f => ({ ...f, stock: Number(v) }))} />
+            <InputField label="Berat (kg)" type="number" value={String(form.weight)} onChange={v => setForm(f => ({ ...f, weight: Number(v) }))} />
           </div>
           <div>
             <label className="block text-sm font-medium mb-1">Kategori</label>
@@ -500,6 +583,22 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
               <option value="">Tanpa kategori</option>
               {(categories || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Gambar Produk</label>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {uploadedImages.map((url, i) => (
+                <div key={i} className="relative w-20 h-20 rounded-lg border border-border overflow-hidden group">
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                  <button onClick={() => removeImage(url)}
+                    className="absolute top-0.5 right-0.5 w-5 h-5 bg-destructive text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+                </div>
+              ))}
+              <label className="w-20 h-20 rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                {uploading ? <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /> : <Plus className="w-4 h-4 text-muted-foreground" />}
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} disabled={uploading} />
+              </label>
+            </div>
           </div>
           <div className="flex gap-4">
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif</label>

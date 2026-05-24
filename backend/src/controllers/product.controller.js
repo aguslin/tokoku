@@ -18,17 +18,17 @@ const getBySlug = catchAsync(async (req, res) => {
 });
 
 const create = catchAsync(async (req, res) => {
-  const data = await productService.create(req.body, req.user);
+  const data = await productService.create(req.body, req.user.userId);
   ApiResponse.created(res, data, 'Product created successfully');
 });
 
 const update = catchAsync(async (req, res) => {
-  const data = await productService.update(req.params.id, req.body, req.user);
+  const data = await productService.update(req.params.id, req.body);
   ApiResponse.success(res, data, 'Product updated successfully');
 });
 
 const remove = catchAsync(async (req, res) => {
-  await productService.remove(req.params.id, req.user);
+  await productService.remove(req.params.id);
   ApiResponse.success(res, null, 'Product deleted successfully');
 });
 

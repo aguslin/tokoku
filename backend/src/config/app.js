@@ -3,7 +3,7 @@ require('dotenv').config();
 module.exports = {
   port: parseInt(process.env.PORT, 10) || 5000,
   nodeEnv: process.env.NODE_ENV || 'development',
-  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   jwt: {
     secret: process.env.JWT_SECRET || 'jwt_super_secret_key_change_in_production',
     refreshSecret: process.env.JWT_REFRESH_SECRET || 'jwt_refresh_super_secret_key_change_in_production',

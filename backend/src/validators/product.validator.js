@@ -19,6 +19,7 @@ const createProduct = [
     .isInt({ min: 0 })
     .withMessage('Stock must be a non-negative integer.'),
   body('categoryId')
+    .optional()
     .isUUID()
     .withMessage('Valid category ID is required.'),
   validate,

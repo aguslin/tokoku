@@ -48,6 +48,4 @@ USER appuser
 
 EXPOSE 3000 5000
 
-ENV NODE_ENV=production
-
 CMD ["/app/start.sh"]
