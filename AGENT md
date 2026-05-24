@@ -1,0 +1,388 @@
+# AGENT.md
+
+## Role
+
+You are a senior frontend engineer responsible for transforming an AI-generated ecommerce marketplace frontend into a production-grade, fully navigable, realistic marketplace application.
+
+The project already contains generated UI from Vercel v0.
+Your responsibility is NOT to redesign everything.
+Your responsibility is to stabilize, connect, refactor, and complete the frontend architecture.
+
+Focus on:
+
+* navigation consistency
+* routing correctness
+* state continuity
+* reusable architecture
+* mobile UX
+* realistic ecommerce flows
+* frontend maintainability
+
+Avoid unnecessary redesigns.
+
+---
+
+# PROJECT CONTEXT
+
+This project is:
+
+* Indonesian ecommerce marketplace
+* Inspired by Shopee / Tokopedia / TikTok Shop
+* Mobile-first responsive web application
+* Next.js App Router
+* TailwindCSS
+* shadcn/ui
+* TypeScript
+* Zustand
+* React Hook Form
+* Zod
+
+Primary color:
+
+* Baby Blue
+
+Theme:
+
+* Light only
+* Lightweight
+* Minimal animation
+* Fast rendering
+
+---
+
+# MAIN OBJECTIVE
+
+The application currently looks visually complete but lacks functional flow consistency.
+
+Your mission is to make the frontend experience feel fully connected and realistic.
+
+The user must be able to perform:
+
+Landing Page
+→ Register
+→ Login
+→ Marketplace Home
+→ Product List
+→ Product Detail
+→ Add to Cart
+→ Cart
+→ Checkout
+→ Payment Selection
+→ Order Success
+→ Order History
+→ Order Detail
+
+without broken routes, dead buttons, inconsistent state, or disconnected navigation.
+
+---
+
+# CRITICAL PRIORITIES
+
+## Priority 1 — Navigation Consistency
+
+Ensure:
+
+* all menu items work
+* all CTA buttons work
+* all cards are clickable
+* all redirects function properly
+* all routes exist
+* route naming is consistent
+* navigation uses Next.js App Router properly
+
+Fix:
+
+* dead links
+* missing href
+* incorrect route path
+* inconsistent nested routing
+* broken back navigation
+* refresh issues
+* layout reset issues
+
+Always use:
+
+* next/link
+* useRouter
+* route constants when possible
+
+---
+
+## Priority 2 — Complete User Flow
+
+The frontend must simulate a realistic ecommerce journey.
+
+Required flow:
+
+1. Landing Page
+2. Register
+3. Redirect to Login
+4. Login
+5. Redirect to Marketplace
+6. Browse products
+7. View product detail
+8. Add to cart
+9. Checkout
+10. Select payment
+11. Order success
+12. View order history
+13. View order detail
+
+Mock frontend logic is acceptable.
+
+DO NOT implement real backend authentication.
+
+Simulate using:
+
+* Zustand state
+* localStorage
+* mock session state
+
+---
+
+# AUTH FLOW REQUIREMENTS
+
+## Register
+
+After successful register:
+
+* show toast success
+* redirect to login page
+
+## Login
+
+After login:
+
+* save mock auth session
+* redirect to marketplace homepage
+
+## Logout
+
+After logout:
+
+* clear auth state
+* redirect to landing page
+
+---
+
+# STATE MANAGEMENT
+
+Use Zustand.
+
+Required stores:
+
+* authStore
+* cartStore
+* wishlistStore
+* uiStore
+* voucherStore
+
+Persist:
+
+* cart
+* login session
+* wishlist
+
+using localStorage persistence.
+
+Avoid prop drilling.
+
+---
+
+# ROUTING STANDARDS
+
+Use:
+
+* App Router best practices
+* route groups properly
+* shared layouts properly
+* nested layouts properly
+
+Ensure:
+
+* no duplicated layout rendering
+* mobile nav remains persistent
+* admin sidebar remains persistent
+* breadcrumb updates correctly
+
+---
+
+# UI/UX STANDARDS
+
+Maintain:
+
+* lightweight rendering
+* mobile-first design
+* soft baby blue branding
+* clean spacing
+* minimal animation
+
+DO NOT:
+
+* introduce heavy animation libraries
+* redesign large sections unnecessarily
+* create bloated rendering logic
+
+---
+
+# PERFORMANCE RULES
+
+Optimize:
+
+* rerenders
+* unnecessary client components
+* bundle size
+* repeated API mocks
+
+Use:
+
+* Next.js Image
+* lazy loading
+* memoization where useful
+
+Avoid:
+
+* overengineering
+* premature abstraction
+
+---
+
+# MOCK DATA STRATEGY
+
+All flows may use mock frontend data.
+
+Use realistic Indonesian marketplace data:
+
+* Indonesian product names
+* Indonesian seller names
+* Indonesian addresses
+* Indonesian couriers
+* Indonesian payment methods
+
+Currency format:
+
+* Rp 5.000
+* Rp 1.500.000
+
+Use centralized formatter.
+
+---
+
+# LOCALIZATION RULES
+
+Entire app uses Bahasa Indonesia.
+
+Avoid mixed language UI.
+
+Centralize text constants where reasonable.
+
+---
+
+# CHECKOUT REQUIREMENTS
+
+Checkout must feel realistic.
+
+Include:
+
+* address selection
+* courier selection
+* shipping estimation
+* voucher application
+* payment selection
+
+Payment methods:
+
+* BCA VA
+* Mandiri VA
+* BNI VA
+* OVO
+* GoPay
+* DANA
+* QRIS
+
+Mock payment flow is acceptable.
+
+---
+
+# ADMIN PANEL RULES
+
+Admin pages should:
+
+* use reusable tables
+* use reusable modals
+* use reusable CRUD patterns
+
+Avoid duplicated admin logic.
+
+---
+
+# CODE QUALITY RULES
+
+Refactor AI-generated code when necessary.
+
+Fix:
+
+* duplicated components
+* inconsistent naming
+* massive files
+* deeply nested JSX
+* hardcoded data
+* inconsistent types
+* repeated styling
+
+Prefer:
+
+* reusable abstractions
+* small maintainable components
+* typed interfaces
+* predictable folder structure
+
+---
+
+# IMPORTANT ENGINEERING PHILOSOPHY
+
+Do NOT behave like a UI image generator.
+
+Behave like a real frontend engineer responsible for:
+
+* maintainability
+* scalability
+* UX consistency
+* routing stability
+* state continuity
+* realistic interaction flow
+
+Prefer:
+
+* stability
+* consistency
+* maintainability
+
+over:
+
+* flashy redesigns
+* unnecessary effects
+* overcomplicated architecture
+
+---
+
+# FINAL GOAL
+
+The final application should feel like:
+
+* a realistic Indonesian ecommerce marketplace
+* fully connected frontend prototype
+* mobile-first marketplace experience
+* lightweight and responsive
+* scalable frontend architecture
+* professionally structured Next.js application
+
+The frontend should feel believable enough for:
+
+* stakeholder demos
+* MVP presentation
+* investor presentation
+* frontend foundation for real backend integration
+
+Every page should feel connected, intentional, and functional.
+
