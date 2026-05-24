@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 function getToken(): string | null {
   try {
@@ -40,7 +40,11 @@ async function request<T>(
     });
     const json = await res.json();
     if (!res.ok) {
-      return { success: false, error: json.message || `HTTP ${res.status}` };
+      let error = json.message || `HTTP ${res.status}`;
+      if (json.errors?.length) {
+        error += ': ' + json.errors.join(', ');
+      }
+      return { success: false, error };
     }
     let responseData = json.data;
     if (responseData && typeof responseData === 'object' && !Array.isArray(responseData)) {

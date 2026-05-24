@@ -6,6 +6,7 @@ import {
   LayoutDashboard, Users, ShoppingBag, Package, FolderTree, Ticket,
   Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown, Loader2
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { Modal } from '@/components/shared/modal';
@@ -467,9 +468,8 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
 
   const handleSave = async () => {
     setSaving(true);
-    const payload = {
+    const payload: Record<string, any> = {
       ...form,
-      categoryId: form.categoryId || null,
       slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'),
       price: Number(form.price),
       comparePrice: Number(form.comparePrice) || null,
@@ -480,8 +480,16 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
         sortOrder: i,
       })),
     };
-    if (edit) await adminApi.put(`/products/${edit.id}`, payload);
-    else await adminApi.post('/products', payload);
+    if (!form.categoryId) delete payload.categoryId;
+    const res = edit
+      ? await adminApi.put(`/products/${edit.id}`, payload)
+      : await adminApi.post('/products', payload);
+    if (!res.success) {
+      toast.error(res.error || 'Gagal menyimpan produk');
+      setSaving(false);
+      return;
+    }
+    toast.success(edit ? 'Produk berhasil diperbarui' : 'Produk berhasil ditambahkan');
     setSaving(false); setShow(false); refetch();
   };
 

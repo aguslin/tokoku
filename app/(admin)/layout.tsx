@@ -7,7 +7,9 @@ import {
   ShoppingCart, ArrowLeft, LayoutDashboard, ShoppingBag, Users,
   Package, FolderTree, Ticket, Key, CheckCircle, XCircle
 } from 'lucide-react';
+import { Toaster } from 'sonner';
 import { getAdminToken, setAdminToken, clearAdminToken } from '@/lib/api/admin';
+import type { ToasterProps } from 'sonner';
 
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -133,6 +135,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       <div className="flex-1 lg:pt-0 pt-14">
         {children}
       </div>
+      <Toaster richColors closeButton position="top-right" />
     </div>
   );
 }

@@ -61,11 +61,9 @@ app.use((err, _req, res, _next) => {
   let message = err.message || 'Internal server error';
   let errors = null;
 
-  if (err.name === 'ValidationError') {
+  if (err.errors && Array.isArray(err.errors)) {
     statusCode = HTTP_STATUS.UNPROCESSABLE_ENTITY;
-    if (err.errors && Array.isArray(err.errors)) {
-      errors = err.errors.map((e) => e.msg || e.message);
-    }
+    errors = err.errors.map((e) => e.msg || e.message || e);
   }
 
   if (err.name === 'SequelizeValidationError') {
