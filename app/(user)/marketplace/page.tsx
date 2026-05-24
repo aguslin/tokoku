@@ -23,20 +23,26 @@ export default function MarketplacePage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { addItem } = useCartStore();
   const { addItem: addWishlist, removeItem: removeWishlist, isInWishlist } = useWishlistStore();
 
   useEffect(() => {
     const fetchProducts = async () => {
       try {
+        setError(null);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
         const res = await fetch(`${apiUrl}/products?limit=50`);
         const json = await res.json();
         if (json.success && json.data?.products) {
-          setProducts(json.data.products);
+          setProducts(Array.isArray(json.data.products) ? json.data.products : []);
+        } else {
+          setProducts([]);
         }
       } catch (e) {
         console.error('Failed to fetch products', e);
+        setError('Failed to load products');
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -101,6 +107,12 @@ export default function MarketplacePage() {
               {searchQuery ? `Hasil Pencarian: "${searchQuery}"` : 'Semua Produk'}
             </h2>
           </div>
+
+          {error && (
+            <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg mb-6">
+              {error}
+            </div>
+          )}
 
           {loading ? (
             <div className="flex justify-center py-16">
