@@ -1,415 +1,696 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { BarChart3, Users, ShoppingBag, TrendingUp, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import {
+  LayoutDashboard, Users, ShoppingBag, Package, FolderTree, Ticket,
+  Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown
+} from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
-import { DataTable, type Column } from '@/components/shared/data-table';
 import { Modal } from '@/components/shared/modal';
+import { adminApi } from '@/lib/api/admin';
 
-interface Order {
-  id: string;
-  customer: string;
-  email: string;
-  amount: number;
-  status: 'pending' | 'processing' | 'completed' | 'cancelled';
-  date: string;
-}
+type Tab = 'users' | 'categories' | 'products' | 'orders' | 'vouchers';
 
-interface User {
-  id: string;
-  name: string;
-  email: string;
-  joinDate: string;
-  orders: number;
-  totalSpent: number;
-}
-
-interface Product {
-  id: string;
-  name: string;
-  category: string;
-  price: number;
-  stock: number;
-  sold: number;
-}
-
-const MOCK_ORDERS: Order[] = [
-  {
-    id: 'ORD-001',
-    customer: 'John Doe',
-    email: 'john@example.com',
-    amount: 299.99,
-    status: 'completed',
-    date: '2024-05-20',
-  },
-  {
-    id: 'ORD-002',
-    customer: 'Jane Smith',
-    email: 'jane@example.com',
-    amount: 159.99,
-    status: 'processing',
-    date: '2024-05-21',
-  },
-  {
-    id: 'ORD-003',
-    customer: 'Bob Johnson',
-    email: 'bob@example.com',
-    amount: 499.99,
-    status: 'completed',
-    date: '2024-05-21',
-  },
+const TABS: { id: Tab; label: string; icon: any }[] = [
+  { id: 'users', label: 'Pengguna', icon: Users },
+  { id: 'categories', label: 'Kategori', icon: FolderTree },
+  { id: 'products', label: 'Produk', icon: Package },
+  { id: 'orders', label: 'Pesanan', icon: ShoppingBag },
+  { id: 'vouchers', label: 'Voucher', icon: Ticket },
 ];
 
-const MOCK_USERS: User[] = [
-  {
-    id: 'user-1',
-    name: 'John Doe',
-    email: 'john@example.com',
-    joinDate: '2024-01-15',
-    orders: 12,
-    totalSpent: 2499.99,
-  },
-  {
-    id: 'user-2',
-    name: 'Jane Smith',
-    email: 'jane@example.com',
-    joinDate: '2024-02-20',
-    orders: 8,
-    totalSpent: 1699.99,
-  },
-  {
-    id: 'user-3',
-    name: 'Bob Johnson',
-    email: 'bob@example.com',
-    joinDate: '2024-03-10',
-    orders: 15,
-    totalSpent: 3999.99,
-  },
-];
+const STATUS_STYLES: Record<string, string> = {
+  pending: 'bg-warning/10 text-warning',
+  paid: 'bg-blue-100 text-blue-600',
+  processing: 'bg-blue-100 text-blue-600',
+  shipped: 'bg-primary/10 text-primary',
+  delivered: 'bg-success/10 text-success',
+  completed: 'bg-success/10 text-success',
+  cancelled: 'bg-destructive/10 text-destructive',
+};
 
-const MOCK_PRODUCTS: Product[] = [
-  {
-    id: 'prod-1',
-    name: 'Wireless Headphones',
-    category: 'Electronics',
-    price: 129.99,
-    stock: 45,
-    sold: 128,
-  },
-  {
-    id: 'prod-2',
-    name: 'Cotton T-Shirt',
-    category: 'Fashion',
-    price: 19.99,
-    stock: 200,
-    sold: 450,
-  },
-  {
-    id: 'prod-3',
-    name: 'Coffee Maker',
-    category: 'Home',
-    price: 49.99,
-    stock: 30,
-    sold: 87,
-  },
-];
+const ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'];
+
+function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?: string }>) {
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const fetch = useCallback(async () => {
+    setLoading(true); setError('');
+    const res = await fetcher();
+    if (res.success && res.data) {
+      setData(Array.isArray(res.data) ? res.data as any : res.data);
+    } else {
+      setError(res.error || 'Gagal memuat data');
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetch(); }, []);
+
+  return { data, loading, error, refetch: fetch };
+}
+
+interface UserData { id: string; name: string; email: string; phone: string; isActive: boolean; createdAt: string; }
+interface Category { id: string; name: string; slug: string; description: string; isActive: boolean; sortOrder: number; }
+interface Product { id: string; name: string; slug: string; price: number; stock: number; sku: string; isActive: boolean; isFeatured: boolean; categoryId: string; }
+interface Order { id: string; orderNumber: string; status: string; total: number; subtotal: number; shippingCost: number; notes: string; createdAt: string; userId: string; }
+interface Voucher { id: string; code: string; name: string; type: string; value: number; minOrder: number; maxDiscount: number | null; usageLimit: number | null; usedCount: number; startsAt: string; endsAt: string; isActive: boolean; }
 
 function DashboardContent() {
   const searchParams = useSearchParams();
-  const [activeTab, setActiveTab] = useState<'overview' | 'orders' | 'users' | 'products'>('overview');
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+  const [tab, setTab] = useState<Tab>('users');
+  const [search, setSearch] = useState('');
+
+  const users = useFetch<UserData[]>(() => adminApi.get('/users'));
+  const categories = useFetch<Category[]>(() => adminApi.get('/categories'));
+  const products = useFetch<Product[]>(() => adminApi.get('/products'));
+  const orders = useFetch<Order[]>(() => adminApi.get('/orders/all'));
+  const vouchers = useFetch<Voucher[]>(() => adminApi.get('/vouchers'));
 
   useEffect(() => {
-    const tab = searchParams.get('tab');
-    if (tab === 'orders' || tab === 'users' || tab === 'products') {
-      setActiveTab(tab);
-    }
+    const t = searchParams.get('tab');
+    if (t && TABS.some(tab => tab.id === t)) setTab(t as Tab);
   }, [searchParams]);
 
-  const stats = [
-    {
-      label: 'Total Revenue',
-      value: '$12,345.99',
-      change: 12.5,
-      icon: TrendingUp,
-    },
-    {
-      label: 'Total Orders',
-      value: '1,234',
-      change: 8.2,
-      icon: ShoppingBag,
-    },
-    {
-      label: 'Active Users',
-      value: '892',
-      change: 5.1,
-      icon: Users,
-    },
-    {
-      label: 'Average Order',
-      value: '$94.32',
-      change: -2.3,
-      icon: BarChart3,
-    },
-  ];
-
-  const orderColumns: Column<Order>[] = [
-    { key: 'id', label: 'Order ID', sortable: true, searchable: true },
-    { key: 'customer', label: 'Customer', sortable: true, searchable: true },
-    { key: 'email', label: 'Email', sortable: true, searchable: true },
-    {
-      key: 'amount',
-      label: 'Amount',
-      sortable: true,
-      render: (value) => `$${value.toFixed(2)}`,
-    },
-    {
-      key: 'status',
-      label: 'Status',
-      sortable: true,
-      render: (value) => (
-        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-          value === 'completed'
-            ? 'bg-success/10 text-success'
-            : value === 'processing'
-            ? 'bg-info/10 text-info'
-            : value === 'pending'
-            ? 'bg-warning/10 text-warning'
-            : 'bg-destructive/10 text-destructive'
-        }`}>
-          {value.charAt(0).toUpperCase() + value.slice(1)}
-        </span>
-      ),
-    },
-    { key: 'date', label: 'Date', sortable: true },
-  ];
-
-  const userColumns: Column<User>[] = [
-    { key: 'name', label: 'Name', sortable: true, searchable: true },
-    { key: 'email', label: 'Email', sortable: true, searchable: true },
-    { key: 'joinDate', label: 'Joined', sortable: true },
-    { key: 'orders', label: 'Orders', sortable: true },
-    {
-      key: 'totalSpent',
-      label: 'Total Spent',
-      sortable: true,
-      render: (value) => `$${value.toFixed(2)}`,
-    },
-  ];
-
-  const productColumns: Column<Product>[] = [
-    { key: 'name', label: 'Product Name', sortable: true, searchable: true },
-    { key: 'category', label: 'Category', sortable: true },
-    {
-      key: 'price',
-      label: 'Price',
-      sortable: true,
-      render: (value) => `$${value.toFixed(2)}`,
-    },
-    {
-      key: 'stock',
-      label: 'Stock',
-      sortable: true,
-      render: (value) => (
-        <span className={value < 50 ? 'text-warning font-medium' : ''}>{value}</span>
-      ),
-    },
-    { key: 'sold', label: 'Sold', sortable: true },
-  ];
-
   return (
-    <main className="min-h-screen bg-background p-4 sm:p-6 lg:p-8">
-      <div className="max-w-7xl mx-auto space-y-8">
-        {/* Header */}
-        <div>
-          <h1 className="text-4xl font-bold text-foreground">Admin Dashboard</h1>
-          <p className="text-muted-foreground mt-1">Welcome back! Here&apos;s your marketplace overview.</p>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {stats.map((stat) => {
-            const Icon = stat.icon;
-            const isPositive = stat.change >= 0;
-
-            return (
-              <Card key={stat.label} className="space-y-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">{stat.label}</p>
-                    <p className="text-2xl font-bold text-foreground mt-1">{stat.value}</p>
-                  </div>
-                  <div className="p-2 bg-primary/10 rounded-lg">
-                    <Icon className="w-5 h-5 text-primary" />
-                  </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  {isPositive ? (
-                    <ArrowUpRight className="w-4 h-4 text-success" />
-                  ) : (
-                    <ArrowDownRight className="w-4 h-4 text-destructive" />
-                  )}
-                  <span className={isPositive ? 'text-success' : 'text-destructive'}>
-                    {Math.abs(stat.change)}%
-                  </span>
-                  <span className="text-xs text-muted-foreground">vs last month</span>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
-
-        {/* Tabs */}
-        <div className="flex gap-2 border-b border-border">
-          {[
-            { id: 'overview' as const, label: 'Overview' },
-            { id: 'orders' as const, label: 'Orders' },
-            { id: 'users' as const, label: 'Users' },
-            { id: 'products' as const, label: 'Products' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`px-4 py-3 font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Overview Tab */}
-        {activeTab === 'overview' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card>
-              <h2 className="text-lg font-bold text-foreground mb-4">Recent Orders</h2>
-              <div className="space-y-3">
-                {MOCK_ORDERS.slice(0, 3).map(order => (
-                  <div key={order.id} className="flex justify-between items-center p-3 bg-muted/30 rounded-lg">
-                    <div>
-                      <p className="font-medium text-foreground">{order.id}</p>
-                      <p className="text-sm text-muted-foreground">{order.customer}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-bold text-primary">${order.amount.toFixed(2)}</p>
-                      <p className="text-xs text-muted-foreground">{order.date}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card>
-              <h2 className="text-lg font-bold text-foreground mb-4">Quick Actions</h2>
-              <div className="space-y-2">
-                <Button fullWidth variant="outline">Add New Product</Button>
-                <Button fullWidth variant="outline">View Reports</Button>
-                <Button fullWidth variant="outline">Manage Sellers</Button>
-                <Button fullWidth variant="outline">System Settings</Button>
-              </div>
-            </Card>
+    <main className="min-h-screen bg-sky-50/30 p-3 sm:p-4 lg:p-6">
+      <div className="max-w-7xl mx-auto space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Panel Admin</h1>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {TABS.map(t => {
+              const Icon = t.icon;
+              return (
+                <button key={t.id} onClick={() => setTab(t.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-colors ${
+                    tab === t.id ? 'bg-primary text-white shadow-sm' : 'bg-white text-muted-foreground hover:text-primary border border-border'
+                  }`}>
+                  <Icon className="w-3.5 h-3.5" />
+                  {t.label}
+                </button>
+              );
+            })}
           </div>
-        )}
+        </div>
 
-        {/* Orders Tab */}
-        {activeTab === 'orders' && (
-          <DataTable
-            columns={orderColumns}
-            data={MOCK_ORDERS}
-            actions={[
-              {
-                label: 'View',
-                onClick: (order) => setSelectedOrder(order),
-                variant: 'outline',
-              },
-              {
-                label: 'Cancel',
-                onClick: (order) => console.log('Cancel order:', order.id),
-                variant: 'destructive',
-              },
-            ]}
-            searchable
-            sortable
-            exportable
-            onExport={() => console.log('Export orders')}
-          />
-        )}
-
-        {/* Users Tab */}
-        {activeTab === 'users' && (
-          <DataTable
-            columns={userColumns}
-            data={MOCK_USERS}
-            searchable
-            sortable
-            exportable
-            onExport={() => console.log('Export users')}
-          />
-        )}
-
-        {/* Products Tab */}
-        {activeTab === 'products' && (
-          <DataTable
-            columns={productColumns}
-            data={MOCK_PRODUCTS}
-            searchable
-            sortable
-            selectable
-            exportable
-            onExport={() => console.log('Export products')}
-          />
-        )}
-
-        {/* Order Detail Modal */}
-        {selectedOrder && (
-          <Modal
-            isOpen={true}
-            title={`Order ${selectedOrder.id}`}
-            onClose={() => setSelectedOrder(null)}
-            footer={
-              <>
-                <Button variant="outline" onClick={() => setSelectedOrder(null)}>
-                  Close
-                </Button>
-                <Button>Update Status</Button>
-              </>
-            }
-          >
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Customer</p>
-                  <p className="font-medium text-foreground">{selectedOrder.customer}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Email</p>
-                  <p className="font-medium text-foreground">{selectedOrder.email}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-muted-foreground">Amount</p>
-                  <p className="text-lg font-bold text-primary">${selectedOrder.amount.toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
-                  <p className="font-medium text-foreground capitalize">{selectedOrder.status}</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Order Date</p>
-                <p className="font-medium text-foreground">{selectedOrder.date}</p>
-              </div>
-            </div>
-          </Modal>
-        )}
+        {tab === 'users' && <UsersSection {...users} search={search} setSearch={setSearch} />}
+        {tab === 'categories' && <CategoriesSection {...categories} search={search} setSearch={setSearch} />}
+        {tab === 'products' && <ProductsSection {...products} search={search} setSearch={setSearch} categories={categories.data || []} />}
+        {tab === 'orders' && <OrdersSection {...orders} search={search} setSearch={setSearch} />}
+        {tab === 'vouchers' && <VouchersSection {...vouchers} search={search} setSearch={setSearch} />}
       </div>
     </main>
+  );
+}
+
+function SearchBar({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+      <input type="text" placeholder={placeholder || 'Cari...'} value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full sm:w-72 pl-9 pr-3 py-2 border border-input rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-primary/30" />
+    </div>
+  );
+}
+
+function TableSkeleton() {
+  return (
+    <div className="bg-white rounded-lg border border-border overflow-hidden">
+      <div className="p-4 border-b border-border"><div className="h-8 bg-muted rounded w-48 animate-pulse" /></div>
+      {[1,2,3,4,5].map(i => (
+        <div key={i} className="p-4 border-b border-border"><div className="h-5 bg-muted rounded w-full animate-pulse" /></div>
+      ))}
+    </div>
+  );
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="bg-white rounded-lg border border-border p-8 text-center text-muted-foreground text-sm">{message}</div>
+  );
+}
+
+function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="bg-white rounded-lg border border-border p-4 flex items-center gap-2 text-sm text-destructive">
+      <AlertCircle className="w-4 h-4 shrink-0" />
+      <span className="flex-1">{message}</span>
+      <Button variant="ghost" size="sm" onClick={onRetry}>Ulangi</Button>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_STYLES[status] || 'bg-muted text-muted-foreground'}`}>
+      {status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+function CrudModal({ isOpen, onClose, title, children, onSave, saving }: {
+  isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode;
+  onSave: () => void; saving?: boolean;
+}) {
+  return (
+    <Modal isOpen={isOpen} title={title} onClose={onClose} size="lg"
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button onClick={onSave} disabled={saving}>{saving ? 'Menyimpan...' : 'Simpan'}</Button>
+        </>
+      }>
+      {children}
+    </Modal>
+  );
+}
+
+function ConfirmDelete({ id, onClose, onConfirm }: { id: string | null; onClose: () => void; onConfirm: () => void }) {
+  return (
+    <Modal isOpen={!!id} title="Konfirmasi Hapus" onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>Batal</Button>
+          <Button variant="destructive" onClick={onConfirm}>Hapus</Button>
+        </>
+      }>
+      <p className="text-sm text-muted-foreground">Yakin ingin menghapus data ini? Tindakan ini tidak bisa dibatalkan.</p>
+    </Modal>
+  );
+}
+
+function UsersSection({ data, loading, error, refetch, search, setSearch }: any) {
+  const [show, setShow] = useState(false);
+  const [edit, setEdit] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', email: '', phone: '', isActive: true });
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const filtered = (data || []).filter((u: UserData) =>
+    u.name?.toLowerCase().includes(search.toLowerCase()) ||
+    u.email?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEdit(null); setForm({ name: '', email: '', phone: '', isActive: true }); setShow(true); };
+  const openEdit = (u: UserData) => { setEdit(u); setForm({ name: u.name, email: u.email, phone: u.phone || '', isActive: u.isActive }); setShow(true); };
+
+  const handleSave = async () => {
+    setSaving(true);
+    if (edit) await adminApi.put(`/users/profile`, form);
+    else await adminApi.post('/auth/register', { ...form, password: 'password123' });
+    setSaving(false); setShow(false); refetch();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await adminApi.del(`/users/${deleteId}`);
+    setDeleteId(null); refetch();
+  };
+
+  const toggleActive = async (u: UserData) => {
+    await adminApi.put(`/users/profile`, { ...form, name: u.name, email: u.email, phone: u.phone, isActive: !u.isActive });
+    refetch();
+  };
+
+  if (loading) return <TableSkeleton />;
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+  if (!filtered.length) return <EmptyState message="Belum ada pengguna" />;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <SearchBar value={search} onChange={setSearch} placeholder="Cari pengguna..." />
+        <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={openCreate}>Tambah</Button>
+      </div>
+      <div className="bg-white rounded-lg border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-sky-50">
+                <th className="px-3 py-2.5 text-left font-semibold text-foreground">Nama</th>
+                <th className="px-3 py-2.5 text-left font-semibold text-foreground hidden sm:table-cell">Email</th>
+                <th className="px-3 py-2.5 text-left font-semibold text-foreground hidden md:table-cell">Status</th>
+                <th className="px-3 py-2.5 text-right font-semibold text-foreground">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((u: UserData) => (
+                <tr key={u.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
+                  <td className="px-3 py-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0">
+                        {u.name?.charAt(0)?.toUpperCase() || '?'}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-medium text-foreground truncate">{u.name}</p>
+                        <p className="text-xs text-muted-foreground sm:hidden">{u.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{u.email}</td>
+                  <td className="px-3 py-2.5 hidden md:table-cell">
+                    <button onClick={() => toggleActive(u)}
+                      className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
+                        u.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'
+                      }`}>
+                      {u.isActive ? 'Aktif' : 'Nonaktif'}
+                    </button>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openEdit(u)} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteId(u.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">
+          {filtered.length} dari {(data || []).length} pengguna
+        </div>
+      </div>
+      <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Pengguna' : 'Tambah Pengguna'} onSave={handleSave} saving={saving}>
+        <div className="space-y-3">
+          <InputField label="Nama" value={form.name} onChange={v => setForm({ ...form, name: v })} />
+          <InputField label="Email" type="email" value={form.email} onChange={v => setForm({ ...form, email: v })} />
+          <InputField label="Telepon" value={form.phone} onChange={v => setForm({ ...form, phone: v })} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4 rounded border-input" /> Aktif</label>
+        </div>
+      </CrudModal>
+      <ConfirmDelete id={deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} />
+    </div>
+  );
+}
+
+function CategoriesSection({ data, loading, error, refetch, search, setSearch }: any) {
+  const [show, setShow] = useState(false);
+  const [edit, setEdit] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', slug: '', description: '', isActive: true, sortOrder: 0 });
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const filtered = (data || []).filter((c: Category) =>
+    c.name?.toLowerCase().includes(search.toLowerCase()) || c.slug?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEdit(null); setForm({ name: '', slug: '', description: '', isActive: true, sortOrder: 0 }); setShow(true); };
+  const openEdit = (c: Category) => { setEdit(c); setForm({ name: c.name, slug: c.slug, description: c.description || '', isActive: c.isActive, sortOrder: c.sortOrder }); setShow(true); };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const p = { ...form, slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-') };
+    if (edit) await adminApi.put(`/categories/${edit.id}`, p);
+    else await adminApi.post('/categories', p);
+    setSaving(false); setShow(false); refetch();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await adminApi.del(`/categories/${deleteId}`);
+    setDeleteId(null); refetch();
+  };
+
+  if (loading) return <TableSkeleton />;
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+  if (!filtered.length) return <EmptyState message="Belum ada kategori" />;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <SearchBar value={search} onChange={setSearch} placeholder="Cari kategori..." />
+        <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={openCreate}>Tambah</Button>
+      </div>
+      <div className="bg-white rounded-lg border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-sky-50">
+                <th className="px-3 py-2.5 text-left font-semibold">Nama</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Slug</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden md:table-cell">Status</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((c: Category) => (
+                <tr key={c.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
+                  <td className="px-3 py-2.5 font-medium">{c.name}</td>
+                  <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{c.slug}</td>
+                  <td className="px-3 py-2.5 hidden md:table-cell">
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${c.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>{c.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openEdit(c)} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteId(c.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {(data || []).length} kategori</div>
+      </div>
+      <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Kategori' : 'Tambah Kategori'} onSave={handleSave} saving={saving}>
+        <div className="space-y-3">
+          <InputField label="Nama" value={form.name} onChange={v => { setForm(f => ({ ...f, name: v })); if (!edit) setForm(f => ({ ...f, slug: v.toLowerCase().replace(/\s+/g, '-') })); }} />
+          <InputField label="Slug" value={form.slug} onChange={v => setForm(f => ({ ...f, slug: v }))} />
+          <div><label className="block text-sm font-medium mb-1">Deskripsi</label><textarea value={form.description} rows={2} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" /></div>
+          <InputField label="Urutan" type="number" value={String(form.sortOrder)} onChange={v => setForm(f => ({ ...f, sortOrder: parseInt(v) || 0 }))} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif</label>
+        </div>
+      </CrudModal>
+      <ConfirmDelete id={deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} />
+    </div>
+  );
+}
+
+function ProductsSection({ data, loading, error, refetch, search, setSearch, categories }: any) {
+  const [show, setShow] = useState(false);
+  const [edit, setEdit] = useState<any>(null);
+  const [form, setForm] = useState({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', isActive: true, isFeatured: false, categoryId: '' });
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const filtered = (data || []).filter((p: Product) =>
+    p.name?.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEdit(null); setForm({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', isActive: true, isFeatured: false, categoryId: '' }); setShow(true); };
+  const openEdit = (p: Product) => { setEdit(p); setForm({ name: p.name, slug: p.slug, description: '', price: p.price, comparePrice: 0, stock: p.stock, sku: p.sku || '', isActive: p.isActive, isFeatured: p.isFeatured, categoryId: p.categoryId || '' }); setShow(true); };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const p = { ...form, slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'), price: Number(form.price), stock: Number(form.stock) };
+    if (edit) await adminApi.put(`/products/${edit.id}`, p);
+    else await adminApi.post('/products', p);
+    setSaving(false); setShow(false); refetch();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await adminApi.del(`/products/${deleteId}`);
+    setDeleteId(null); refetch();
+  };
+
+  if (loading) return <TableSkeleton />;
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+  if (!filtered.length) return <EmptyState message="Belum ada produk" />;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <SearchBar value={search} onChange={setSearch} placeholder="Cari produk..." />
+        <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={openCreate}>Tambah</Button>
+      </div>
+      <div className="bg-white rounded-lg border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-sky-50">
+                <th className="px-3 py-2.5 text-left font-semibold">Nama</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Harga</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Stok</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden md:table-cell">Status</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p: Product) => (
+                <tr key={p.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
+                  <td className="px-3 py-2.5">
+                    <div className="min-w-0">
+                      <p className="font-medium text-foreground truncate">{p.name}</p>
+                      <p className="text-xs text-muted-foreground">{p.sku || '-'}</p>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {p.price.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 hidden sm:table-cell">
+                    <span className={p.stock < 10 ? 'text-destructive font-medium' : ''}>{p.stock}</span>
+                  </td>
+                  <td className="px-3 py-2.5 hidden md:table-cell">
+                    <div className="flex gap-1">
+                      <span className={`px-1.5 py-0.5 text-xs rounded-full ${p.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>{p.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                      {p.isFeatured && <span className="px-1.5 py-0.5 text-xs rounded-full bg-blue-100 text-blue-600">Unggulan</span>}
+                    </div>
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openEdit(p)} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteId(p.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {(data || []).length} produk</div>
+      </div>
+      <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Produk' : 'Tambah Produk'} onSave={handleSave} saving={saving}>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <InputField label="Nama" value={form.name} onChange={v => { setForm(f => ({ ...f, name: v })); if (!edit) setForm(f => ({ ...f, slug: v.toLowerCase().replace(/\s+/g, '-') })); }} />
+            <InputField label="SKU" value={form.sku} onChange={v => setForm(f => ({ ...f, sku: v }))} />
+          </div>
+          <InputField label="Slug" value={form.slug} onChange={v => setForm(f => ({ ...f, slug: v }))} />
+          <div className="grid grid-cols-2 gap-3">
+            <InputField label="Harga" type="number" value={String(form.price)} onChange={v => setForm(f => ({ ...f, price: Number(v) }))} />
+            <InputField label="Stok" type="number" value={String(form.stock)} onChange={v => setForm(f => ({ ...f, stock: Number(v) }))} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Kategori</label>
+            <select value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
+              className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+              <option value="">Tanpa kategori</option>
+              {(categories || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif</label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isFeatured} onChange={e => setForm(f => ({ ...f, isFeatured: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Unggulan</label>
+          </div>
+        </div>
+      </CrudModal>
+      <ConfirmDelete id={deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} />
+    </div>
+  );
+}
+
+function OrdersSection({ data, loading, error, refetch, search, setSearch }: any) {
+  const [selected, setSelected] = useState<Order | null>(null);
+  const [newStatus, setNewStatus] = useState('');
+  const [updating, setUpdating] = useState(false);
+
+  const filtered = (data || []).filter((o: Order) =>
+    (o.orderNumber || o.id)?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const updateStatus = async () => {
+    if (!selected || !newStatus || newStatus === selected.status) return;
+    setUpdating(true);
+    await adminApi.put(`/orders/${selected.id}/status`, { status: newStatus });
+    setUpdating(false); setSelected(null); refetch();
+  };
+
+  if (loading) return <TableSkeleton />;
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+  if (!filtered.length) return <EmptyState message="Belum ada pesanan" />;
+
+  return (
+    <div className="space-y-3">
+      <SearchBar value={search} onChange={setSearch} placeholder="Cari pesanan..." />
+      <div className="bg-white rounded-lg border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-sky-50">
+                <th className="px-3 py-2.5 text-left font-semibold">Pesanan</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Status</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Total</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((o: Order) => (
+                <tr key={o.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
+                  <td className="px-3 py-2.5">
+                    <p className="font-medium text-foreground">{o.orderNumber || o.id.slice(0, 8)}</p>
+                    <p className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleDateString('id-ID')}</p>
+                  </td>
+                  <td className="px-3 py-2.5 hidden sm:table-cell"><StatusBadge status={o.status} /></td>
+                  <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {(o.total || o.subtotal || 0).toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-right">
+                    <button onClick={() => { setSelected(o); setNewStatus(o.status); }} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"><Eye className="w-3.5 h-3.5" /></button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {(data || []).length} pesanan</div>
+      </div>
+      <Modal isOpen={!!selected} title={`Pesanan ${selected?.orderNumber || selected?.id?.slice(0,8) || ''}`} onClose={() => setSelected(null)} size="lg"
+        footer={
+          <>
+            <Button variant="outline" onClick={() => setSelected(null)}>Tutup</Button>
+            {newStatus && newStatus !== selected?.status && <Button onClick={updateStatus} disabled={updating}>{updating ? 'Menyimpan...' : 'Update Status'}</Button>}
+          </>
+        }>
+        {selected && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div><p className="text-xs text-muted-foreground">ID Pesanan</p><p className="text-sm font-medium">{selected.id}</p></div>
+              <div><p className="text-xs text-muted-foreground">Tanggal</p><p className="text-sm font-medium">{new Date(selected.createdAt).toLocaleString('id-ID')}</p></div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div><p className="text-xs text-muted-foreground">Subtotal</p><p className="text-sm font-medium">Rp {(selected.subtotal || 0).toLocaleString()}</p></div>
+              <div><p className="text-xs text-muted-foreground">Ongkir</p><p className="text-sm font-medium">Rp {(selected.shippingCost || 0).toLocaleString()}</p></div>
+            </div>
+            <div><p className="text-xs text-muted-foreground">Total</p><p className="text-lg font-bold text-primary">Rp {(selected.total || selected.subtotal || 0).toLocaleString()}</p></div>
+            {selected.notes && <div><p className="text-xs text-muted-foreground">Catatan</p><p className="text-sm">{selected.notes}</p></div>}
+            <div>
+              <p className="text-xs text-muted-foreground mb-2">Status</p>
+              <div className="flex flex-wrap gap-1.5">
+                {ORDER_STATUSES.map(s => (
+                  <button key={s} onClick={() => setNewStatus(s)}
+                    className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
+                      newStatus === s ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
+                    }`}>
+                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function VouchersSection({ data, loading, error, refetch, search, setSearch }: any) {
+  const [show, setShow] = useState(false);
+  const [edit, setEdit] = useState<any>(null);
+  const [form, setForm] = useState({ code: '', name: '', type: 'percentage', value: 0, minOrder: 0, maxDiscount: 0, usageLimit: 0, startsAt: '', endsAt: '', isActive: true });
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const filtered = (data || []).filter((v: Voucher) =>
+    v.code?.toLowerCase().includes(search.toLowerCase()) || v.name?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEdit(null); setForm({ code: '', name: '', type: 'percentage', value: 0, minOrder: 0, maxDiscount: 0, usageLimit: 0, startsAt: '', endsAt: '', isActive: true }); setShow(true); };
+  const openEdit = (v: Voucher) => { setEdit(v); setForm({ code: v.code, name: v.name || '', type: v.type || 'percentage', value: v.value, minOrder: v.minOrder, maxDiscount: v.maxDiscount || 0, usageLimit: v.usageLimit || 0, startsAt: v.startsAt ? v.startsAt.slice(0,10) : '', endsAt: v.endsAt ? v.endsAt.slice(0,10) : '', isActive: v.isActive }); setShow(true); };
+
+  const handleSave = async () => {
+    setSaving(true);
+    const p = { ...form, value: Number(form.value), minOrder: Number(form.minOrder), maxDiscount: Number(form.maxDiscount) || null, usageLimit: Number(form.usageLimit) || null, startsAt: form.startsAt ? new Date(form.startsAt).toISOString() : null, endsAt: form.endsAt ? new Date(form.endsAt).toISOString() : null };
+    if (edit) await adminApi.put(`/vouchers/${edit.id}`, p);
+    else await adminApi.post('/vouchers', p);
+    setSaving(false); setShow(false); refetch();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await adminApi.del(`/vouchers/${deleteId}`);
+    setDeleteId(null); refetch();
+  };
+
+  if (loading) return <TableSkeleton />;
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+  if (!filtered.length) return <EmptyState message="Belum ada voucher" />;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <SearchBar value={search} onChange={setSearch} placeholder="Cari voucher..." />
+        <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={openCreate}>Tambah</Button>
+      </div>
+      <div className="bg-white rounded-lg border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border bg-sky-50">
+                <th className="px-3 py-2.5 text-left font-semibold">Kode</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Nilai</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Terpakai</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden md:table-cell">Status</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((v: Voucher) => {
+                const expired = v.endsAt && new Date(v.endsAt) < new Date();
+                return (
+                  <tr key={v.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <span className="font-mono font-bold text-foreground uppercase">{v.code}</span>
+                      {v.name && <p className="text-xs text-muted-foreground">{v.name}</p>}
+                    </td>
+                    <td className="px-3 py-2.5 hidden sm:table-cell text-sm">{v.type === 'percentage' ? `${v.value}%` : `Rp ${v.value.toLocaleString()}`}</td>
+                    <td className="px-3 py-2.5 hidden sm:table-cell text-sm text-muted-foreground">{v.usedCount}{v.usageLimit ? ` / ${v.usageLimit}` : ''}</td>
+                    <td className="px-3 py-2.5 hidden md:table-cell">
+                      <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${
+                        expired ? 'bg-destructive/10 text-destructive' : !v.isActive ? 'bg-muted text-muted-foreground' : 'bg-success/10 text-success'
+                      }`}>{expired ? 'Kadaluarsa' : v.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(v)} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => setDeleteId(v.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {(data || []).length} voucher</div>
+      </div>
+      <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Voucher' : 'Tambah Voucher'} onSave={handleSave} saving={saving}>
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3">
+            <InputField label="Kode" value={form.code} onChange={v => setForm(f => ({ ...f, code: v.toUpperCase() }))} />
+            <InputField label="Nama" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-sm font-medium mb-1">Tipe</label><select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))} className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"><option value="percentage">Persen</option><option value="nominal">Nominal</option></select></div>
+            <InputField label="Nilai" type="number" value={String(form.value)} onChange={v => setForm(f => ({ ...f, value: Number(v) }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <InputField label="Min. Pesanan" type="number" value={String(form.minOrder)} onChange={v => setForm(f => ({ ...f, minOrder: Number(v) }))} />
+            <InputField label="Maks. Diskon" type="number" value={String(form.maxDiscount)} onChange={v => setForm(f => ({ ...f, maxDiscount: Number(v) }))} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <InputField label="Batas Pemakaian" type="number" value={String(form.usageLimit)} onChange={v => setForm(f => ({ ...f, usageLimit: Number(v) }))} />
+            <InputField label="Tanggal Mulai" type="date" value={form.startsAt} onChange={v => setForm(f => ({ ...f, startsAt: v }))} />
+          </div>
+          <InputField label="Tanggal Berakhir" type="date" value={form.endsAt} onChange={v => setForm(f => ({ ...f, endsAt: v }))} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif</label>
+        </div>
+      </CrudModal>
+      <ConfirmDelete id={deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} />
+    </div>
+  );
+}
+
+function InputField({ label, value, onChange, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; type?: string }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium mb-1">{label}</label>
+      <input type={type} value={value} onChange={e => onChange(e.target.value)}
+        className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+    </div>
   );
 }
 

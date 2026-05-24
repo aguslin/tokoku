@@ -5,7 +5,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { LogIn } from 'lucide-react';
+import { LogIn, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { FormField } from '@/components/shared/form-field';
@@ -16,7 +16,8 @@ import { useAuthStore } from '@/lib/store';
 export default function LoginPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
-  const { setUser } = useAuthStore();
+  const [error, setError] = useState<string | null>(null);
+  const loginSuccess = useAuthStore((s) => s.loginSuccess);
 
   const form = useForm({
     resolver: zodResolver(loginSchema),
@@ -28,17 +29,26 @@ export default function LoginPage() {
 
   const onSubmit = async (data: any) => {
     setIsLoading(true);
-    setTimeout(() => {
-      setUser({
-        id: 'user-1',
-        email: data.email,
-        name: data.email.split('@')[0],
-        role: 'user',
-        createdAt: new Date().toISOString(),
+    setError(null);
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api/v1';
+      const res = await fetch(`${apiUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
       });
+      const json = await res.json();
+      if (json.success && json.data) {
+        loginSuccess(json.data);
+        router.push('/marketplace');
+      } else {
+        setError(json.message || 'Email atau password salah.');
+      }
+    } catch (e: any) {
+      setError(e?.message || 'Gagal terhubung ke server. Periksa koneksi Anda.');
+    } finally {
       setIsLoading(false);
-      router.push('/marketplace');
-    }, 1000);
+    }
   };
 
   return (
@@ -51,6 +61,13 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold text-foreground mb-2">{translations.auth.login}</h1>
           <p className="text-muted-foreground">Masuk ke akun Anda</p>
         </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2 text-sm text-destructive">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{error}</span>
+          </div>
+        )}
 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <FormField

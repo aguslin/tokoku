@@ -1,4 +1,190 @@
-# AGENT.md
+# Backend System Architecture Task
+
+Update the existing AGENT.md and continue the project by building a complete production-grade backend architecture for the Indonesian ecommerce marketplace application.
+
+IMPORTANT:
+Do NOT redesign the frontend.
+Do NOT rebuild the frontend structure.
+Focus on backend architecture, API design, database structure, authentication flow, and backend engineering quality.
+
+The backend must be scalable, maintainable, modular, enterprise-ready, and suitable for long-term marketplace growth.
+
+==================================================
+BACKEND TECH STACK
+==================================================
+
+Use:
+
+- Node.js
+- Express.js
+- PostgreSQL
+- Sequelize ORM
+- JWT Authentication
+- bcrypt
+- dotenv
+- multer
+- helmet
+- cors
+- morgan
+- compression
+- express-validator or zod
+- winston logger
+- Redis (prepare architecture even if optional)
+- Swagger/OpenAPI documentation
+- Docker-ready structure
+
+Architecture style:
+- Layered architecture
+- Modular feature-based structure
+- Service pattern
+- Repository/data access abstraction
+- Clean separation of concerns
+
+==================================================
+MAIN OBJECTIVE
+==================================================
+
+Transform the project into a fullstack marketplace application backend with proper:
+
+- authentication
+- authorization
+- API architecture
+- database schema
+- validation
+- error handling
+- logging
+- security
+- scalability
+
+The backend must support the existing frontend flow completely.
+
+==================================================
+PROJECT STRUCTURE
+==================================================
+
+Create scalable backend structure similar to enterprise Node.js systems.
+
+Suggested structure:
+
+/src
+  /config
+  /controllers
+  /services
+  /repositories
+  /routes
+  /middlewares
+  /models
+  /migrations
+  /seeders
+  /validators
+  /utils
+  /helpers
+  /constants
+  /docs
+  /jobs
+  /queues
+  /storage
+  /tests
+
+Root:
+- app.js
+- server.js
+- .env
+- .env.example
+- docker-compose.yml
+- Dockerfile
+- swagger.json
+
+==================================================
+DATABASE DESIGN
+==================================================
+
+Use PostgreSQL.
+
+Create normalized relational schema.
+
+Required entities:
+
+- users
+- roles
+- permissions
+- user_roles
+- categories
+- products
+- product_images
+- product_variants
+- carts
+- cart_items
+- orders
+- order_items
+- payments
+- payment_methods
+- vouchers
+- voucher_usages
+- addresses
+- couriers
+- shipments
+- reviews
+- wishlists
+- notifications
+
+Use:
+- UUID primary keys
+- timestamps
+- soft delete where appropriate
+- proper foreign keys
+- indexes
+- audit fields
+
+==================================================
+AUTHENTICATION & AUTHORIZATION
+==================================================
+
+Implement:
+
+- Register
+- Login
+- Logout
+- Refresh Token
+- JWT Access Token
+- Password hashing
+- Role-based authorization
+
+Roles:
+- Admin
+- User
+
+Features:
+- middleware auth protection
+- role permission middleware
+- token expiration handling
+
+==================================================
+FINAL GOAL
+==================================================
+
+The final backend should feel like:
+
+- enterprise-grade ecommerce backend
+- scalable marketplace architecture
+- clean Node.js backend system
+- maintainable modular API platform
+- realistic production-ready foundation
+- frontend integration ready
+- suitable for future mobile apps
+- suitable for future microservice migration
+
+Focus on:
+- maintainability
+- scalability
+- clean architecture
+- realistic ecommerce flow
+- backend stability
+- production readiness
+
+==================================================
+FRONTEND AGENT
+==================================================
 
 ## Role
 
@@ -385,4 +571,3 @@ The frontend should feel believable enough for:
 * frontend foundation for real backend integration
 
 Every page should feel connected, intentional, and functional.
-
