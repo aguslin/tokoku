@@ -102,6 +102,31 @@ const getAllUsers = async (query) => {
   return { users: rows, meta: getPaginationMeta(count, page, limit) };
 };
 
+const updateUserRole = async (userId, { role }) => {
+  const user = await User.findByPk(userId);
+  if (!user) {
+    throw ApiError.notFound('User not found');
+  }
+
+  const roleRecord = await Role.findOne({ where: { name: role } });
+  if (!roleRecord) {
+    throw ApiError.badRequest(`Role '${role}' not found`);
+  }
+
+  await UserRole.destroy({ where: { userId } });
+  await UserRole.create({ userId, roleId: roleRecord.id });
+
+  const updatedUser = await User.findByPk(userId, {
+    attributes: { exclude: ['password'] },
+    include: [{
+      model: UserRole,
+      include: [{ model: Role, as: 'Role', attributes: ['name'] }],
+    }],
+  });
+
+  return updatedUser;
+};
+
 const deleteUser = async (userId) => {
   const user = await User.findByPk(userId);
   if (!user) {
@@ -117,5 +142,6 @@ module.exports = {
   updateProfile,
   changePassword,
   getAllUsers,
+  updateUserRole,
   deleteUser,
 };

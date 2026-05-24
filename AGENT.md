@@ -1,3 +1,8 @@
+# Port Usage
+- Port 3000: Reserved for another project (catatkas). DO NOT use.
+- Port 3001: Marketplace frontend (Next.js)
+- Port 5000: Marketplace backend API (Express)
+
 # Backend System Architecture Task
 
 Update the existing AGENT.md and continue the project by building a complete production-grade backend architecture for the Indonesian ecommerce marketplace application.

@@ -27,10 +27,16 @@ const deleteUser = catchAsync(async (req, res) => {
   ApiResponse.success(res, null, 'User deleted successfully');
 });
 
+const updateUserRole = catchAsync(async (req, res) => {
+  const data = await userService.updateUserRole(req.params.id, req.body);
+  ApiResponse.success(res, data, 'User role updated successfully');
+});
+
 module.exports = {
   getProfile,
   updateProfile,
   changePassword,
   getAllUsers,
+  updateUserRole,
   deleteUser,
 };

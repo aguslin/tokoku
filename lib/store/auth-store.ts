@@ -1,6 +1,5 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AuthData } from '@/lib/services/auth.service';
 
 export interface User {
   id: string;
@@ -10,6 +9,31 @@ export interface User {
   avatar?: string;
   role: string;
   createdAt: string;
+}
+
+interface AuthData {
+  user: {
+    id: string;
+    email: string;
+    name: string;
+    phone?: string;
+    avatar?: string;
+    isActive: boolean;
+    createdAt: string;
+  };
+  tokens: {
+    accessToken: string;
+    refreshToken: string;
+  };
+}
+
+function decodeRole(token: string): string {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.role || 'user';
+  } catch {
+    return 'user';
+  }
 }
 
 export interface AuthState {
@@ -41,14 +65,18 @@ export const useAuthStore = create<AuthState>()(
       setUser: (user) => set({ user, isAuthenticated: !!user }),
       setLoading: (isLoading) => set({ isLoading }),
       setError: (error) => set({ error }),
-      logout: () =>
+      logout: () => {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('admin-token');
+        }
         set({
           user: null,
           token: null,
           refreshToken: null,
           isAuthenticated: false,
           error: null,
-        }),
+        });
+      },
       loginSuccess: (data: AuthData) =>
         set({
           user: {
@@ -57,7 +85,7 @@ export const useAuthStore = create<AuthState>()(
             name: data.user.name,
             phone: data.user.phone || undefined,
             avatar: data.user.avatar || undefined,
-            role: data.user.isActive ? 'user' : '',
+            role: decodeRole(data.tokens.accessToken),
             createdAt: data.user.createdAt,
           },
           token: data.tokens.accessToken,

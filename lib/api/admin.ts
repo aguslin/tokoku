@@ -42,7 +42,12 @@ async function request<T>(
     if (!res.ok) {
       return { success: false, error: json.message || `HTTP ${res.status}` };
     }
-    return { success: true, data: json.data, message: json.message };
+    let responseData = json.data;
+    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData)) {
+      const arrayProp = Object.values(responseData).find(v => Array.isArray(v));
+      if (arrayProp) responseData = arrayProp;
+    }
+    return { success: true, data: responseData, message: json.message };
   } catch (e: any) {
     return { success: false, error: e.message || 'Network error' };
   }

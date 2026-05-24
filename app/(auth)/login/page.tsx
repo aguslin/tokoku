@@ -12,6 +12,7 @@ import { FormField } from '@/components/shared/form-field';
 import { loginSchema } from '@/lib/schemas/auth';
 import { translations } from '@/lib/i18n/id';
 import { useAuthStore } from '@/lib/store';
+import { setAdminToken } from '@/lib/api/admin';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,7 +41,15 @@ export default function LoginPage() {
       const json = await res.json();
       if (json.success && json.data) {
         loginSuccess(json.data);
-        router.push('/marketplace');
+        const token = json.data.tokens.accessToken;
+        const role = (() => {
+          try { return JSON.parse(atob(token.split('.')[1])).role; }
+          catch { return 'user'; }
+        })();
+        if (role === 'admin') {
+          setAdminToken(token);
+        }
+        router.push(role === 'admin' ? '/dashboard' : '/marketplace');
       } else {
         setError(json.message || 'Email atau password salah.');
       }

@@ -184,10 +184,15 @@ function ConfirmDelete({ id, onClose, onConfirm }: { id: string | null; onClose:
   );
 }
 
+function getRole(u: any): string {
+  const roles = u.UserRoles?.map((ur: any) => ur.Role?.name).filter(Boolean);
+  return roles?.length ? roles.join(', ') : '—';
+}
+
 function UsersSection({ data, loading, error, refetch, search, setSearch }: any) {
   const [show, setShow] = useState(false);
   const [edit, setEdit] = useState<any>(null);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', isActive: true });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', isActive: true, role: 'user' });
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
@@ -196,13 +201,19 @@ function UsersSection({ data, loading, error, refetch, search, setSearch }: any)
     u.email?.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openCreate = () => { setEdit(null); setForm({ name: '', email: '', phone: '', isActive: true }); setShow(true); };
-  const openEdit = (u: UserData) => { setEdit(u); setForm({ name: u.name, email: u.email, phone: u.phone || '', isActive: u.isActive }); setShow(true); };
+  const openCreate = () => { setEdit(null); setForm({ name: '', email: '', phone: '', isActive: true, role: 'user' }); setShow(true); };
+  const openEdit = (u: UserData) => { setEdit(u); setForm({ name: u.name, email: u.email, phone: u.phone || '', isActive: u.isActive, role: getRole(u) }); setShow(true); };
 
   const handleSave = async () => {
     setSaving(true);
-    if (edit) await adminApi.put(`/users/profile`, form);
-    else await adminApi.post('/auth/register', { ...form, password: 'password123' });
+    if (edit) {
+      await adminApi.put(`/users/profile`, { name: form.name, email: form.email, phone: form.phone, isActive: form.isActive });
+      if (form.role && form.role !== getRole(edit)) {
+        await adminApi.put(`/users/${edit.id}/role`, { role: form.role });
+      }
+    } else {
+      await adminApi.post('/auth/register', { ...form, password: 'password123' });
+    }
     setSaving(false); setShow(false); refetch();
   };
 
@@ -213,7 +224,7 @@ function UsersSection({ data, loading, error, refetch, search, setSearch }: any)
   };
 
   const toggleActive = async (u: UserData) => {
-    await adminApi.put(`/users/profile`, { ...form, name: u.name, email: u.email, phone: u.phone, isActive: !u.isActive });
+    await adminApi.put(`/users/profile`, { name: u.name, email: u.email, phone: u.phone, isActive: !u.isActive });
     refetch();
   };
 
@@ -229,15 +240,16 @@ function UsersSection({ data, loading, error, refetch, search, setSearch }: any)
       </div>
       <div className="bg-white rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border bg-sky-50">
-                <th className="px-3 py-2.5 text-left font-semibold text-foreground">Nama</th>
-                <th className="px-3 py-2.5 text-left font-semibold text-foreground hidden sm:table-cell">Email</th>
-                <th className="px-3 py-2.5 text-left font-semibold text-foreground hidden md:table-cell">Status</th>
-                <th className="px-3 py-2.5 text-right font-semibold text-foreground">Aksi</th>
-              </tr>
-            </thead>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-sky-50">
+                    <th className="px-3 py-2.5 text-left font-semibold text-foreground">Nama</th>
+                    <th className="px-3 py-2.5 text-left font-semibold text-foreground hidden sm:table-cell">Email</th>
+                    <th className="px-3 py-2.5 text-left font-semibold text-foreground hidden md:table-cell">Role</th>
+                    <th className="px-3 py-2.5 text-left font-semibold text-foreground hidden md:table-cell">Status</th>
+                    <th className="px-3 py-2.5 text-right font-semibold text-foreground">Aksi</th>
+                  </tr>
+                </thead>
             <tbody>
               {filtered.map((u: UserData) => (
                 <tr key={u.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
@@ -253,6 +265,13 @@ function UsersSection({ data, loading, error, refetch, search, setSearch }: any)
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{u.email}</td>
+                  <td className="px-3 py-2.5 hidden md:table-cell">
+                    <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${
+                      getRole(u) === 'admin' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'
+                    }`}>
+                      {getRole(u)}
+                    </span>
+                  </td>
                   <td className="px-3 py-2.5 hidden md:table-cell">
                     <button onClick={() => toggleActive(u)}
                       className={`inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium rounded-full ${
@@ -281,6 +300,14 @@ function UsersSection({ data, loading, error, refetch, search, setSearch }: any)
           <InputField label="Nama" value={form.name} onChange={v => setForm({ ...form, name: v })} />
           <InputField label="Email" type="email" value={form.email} onChange={v => setForm({ ...form, email: v })} />
           <InputField label="Telepon" value={form.phone} onChange={v => setForm({ ...form, phone: v })} />
+          <div>
+            <label className="block text-sm font-medium mb-1">Role</label>
+            <select value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}
+              className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30">
+              <option value="user">User</option>
+              <option value="admin">Admin</option>
+            </select>
+          </div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm({ ...form, isActive: e.target.checked })} className="w-4 h-4 rounded border-input" /> Aktif</label>
         </div>
       </CrudModal>
