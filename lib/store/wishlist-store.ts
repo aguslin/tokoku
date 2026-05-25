@@ -6,6 +6,11 @@ export interface WishlistItem {
   productName: string;
   productImage: string;
   price: number;
+  slug?: string;
+  sellerName?: string;
+  stock?: number;
+  comparePrice?: number;
+  sold?: number;
 }
 
 export interface WishlistState {

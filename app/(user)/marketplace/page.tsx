@@ -77,6 +77,11 @@ export default function MarketplacePage() {
         productName: product.name,
         productImage: getImageUrl(product),
         price: Number(product.price),
+        slug: product.slug,
+        sellerName: product.seller?.name,
+        stock: product.stock,
+        comparePrice: product.comparePrice ? Number(product.comparePrice) : undefined,
+        sold: product.sold,
       });
     }
   };
@@ -102,11 +107,13 @@ export default function MarketplacePage() {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div>
-          <div className="flex justify-between items-center mb-6">
-            <h2 className="text-xl font-bold text-foreground">
-              {searchQuery ? `Hasil Pencarian: "${searchQuery}"` : 'Semua Produk'}
-            </h2>
-          </div>
+            {searchQuery && (
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-foreground">
+                  Hasil Pencarian: &quot;{searchQuery}&quot;
+                </h2>
+              </div>
+            )}
 
           {error && (
             <div className="bg-destructive/10 border border-destructive/30 text-destructive px-4 py-3 rounded-lg mb-6">
@@ -123,11 +130,11 @@ export default function MarketplacePage() {
               <p className="text-muted-foreground">Tidak ada produk yang ditemukan</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3 sm:gap-4">
               {filteredProducts.map((product) => (
                 <Card key={product.id} hoverable className="overflow-hidden flex flex-col relative">
                   <Link href={`/marketplace/${product.slug || product.id}`}>
-                    <div className="relative h-48 bg-muted mb-4 -mx-4 -mt-4 -mb-4">
+                    <div className="relative h-28 sm:h-48 bg-muted mb-2 sm:mb-4 -mx-4 -mt-4 -mb-4">
                       <div className="absolute inset-0">
                         <Image
                           src={getImageUrl(product)}
@@ -153,28 +160,29 @@ export default function MarketplacePage() {
                   </button>
 
                   <Link href={`/marketplace/${product.slug || product.id}`} className="flex-1">
-                    <div className="space-y-2">
+                    <div className="space-y-1 sm:space-y-2">
                       <p className="text-xs text-muted-foreground">{product.seller?.name || 'Toko'}</p>
-                      <h3 className="font-semibold text-foreground line-clamp-2 text-sm">{product.name}</h3>
-                      {product.description && (
-                        <p className="text-xs text-muted-foreground line-clamp-2">{product.description}</p>
-                      )}
+                      <h3 className="font-semibold text-foreground line-clamp-2 text-xs sm:text-sm">{product.name}</h3>
                     </div>
 
-                    <div className="mt-3 space-y-2">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-bold text-primary">{formatCurrency(Number(product.price))}</span>
+                    <div className="mt-2 sm:mt-3 space-y-1 sm:space-y-2">
+                      <div className="flex items-baseline gap-1 sm:gap-2">
+                        <span className="text-sm sm:text-lg font-bold text-primary">{formatCurrency(Number(product.price))}</span>
                         {product.comparePrice && Number(product.comparePrice) > 0 && (
-                          <span className="text-sm text-muted-foreground line-through">
+                          <span className="text-[10px] sm:text-sm text-muted-foreground line-through">
                             {formatCurrency(Number(product.comparePrice))}
                           </span>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">Stok: {product.stock}</p>
+                      {product.sold > 0 && (
+                        <p className="text-[10px] sm:text-xs text-muted-foreground">
+                          {product.sold} terjual
+                        </p>
+                      )}
                     </div>
                   </Link>
 
-                  <div className="mt-4">
+                  <div className="hidden sm:block mt-4">
                     <Button size="md" fullWidth icon={<ShoppingCart className="w-4 h-4" />} onClick={() => handleAddToCart(product)}>
                       Tambah ke Keranjang
                     </Button>

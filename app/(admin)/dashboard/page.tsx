@@ -92,7 +92,7 @@ interface UserData { id: string; name: string; email: string; phone: string; isA
 interface Category { id: string; name: string; slug: string; description: string; isActive: boolean; sortOrder: number; }
 interface Product { id: string; name: string; slug: string; price: number; stock: number; sku: string; isActive: boolean; isFeatured: boolean; categoryId: string; }
 interface OrderPayment { id: string; status: string; paymentMethodId: string; amount: number; paidAt: string | null; transactionId: string | null; metadata: { proofUrl?: string } | null; PaymentMethod?: { id: string; name: string; code: string } | null; }
-interface Order { id: string; orderNumber: string; status: string; total: number; subtotal: number; shippingCost: number; notes: string; createdAt: string; userId: string; paidAt: string | null; Payments?: OrderPayment[]; }
+interface Order { id: string; orderNumber: string; status: string; total: number; subtotal: number; shippingCost: number; notes: string; createdAt: string; userId: string; paidAt: string | null; Payments?: OrderPayment[]; OrderItems?: { id: string; productId: string; productName: string; quantity: number; price: number; }[]; }
 interface Voucher { id: string; code: string; name: string; type: string; value: number; minOrder: number; maxDiscount: number | null; usageLimit: number | null; usedCount: number; startsAt: string; endsAt: string; isActive: boolean; }
 
 function DashboardContent() {
@@ -733,6 +733,13 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
       createdAt: lo.createdAt,
       userId: '',
       paidAt: lo.paymentProofUploadedAt || null,
+      OrderItems: lo.items.map(item => ({
+        id: item.productId,
+        productId: item.productId,
+        productName: item.productName,
+        quantity: item.quantity,
+        price: item.price,
+      })),
       Payments: (lo.paymentProof || lo.status === 'paid' || lo.status === 'confirmed' || lo.status === 'processing' || lo.status === 'shipped' || lo.status === 'delivered' || lo.status === 'completed') ? [{
         id: '',
         status: ['confirmed', 'processing', 'shipped', 'delivered', 'completed'].includes(lo.status) ? 'paid' : lo.paymentProof ? 'submitted' : 'pending',
@@ -779,6 +786,18 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
     const res = await adminApi.put(`/orders/${selected.id}/status`, { status: newStatus });
     if (!res.success) {
       updateLocalOrderStatus(selected.id, newStatus as Order['status']);
+      if (newStatus === 'shipped') {
+        const orderItems = selected.OrderItems || (selected as any).items;
+        if (orderItems) {
+          for (const item of orderItems) {
+            const productRes = await adminApi.get<any>(`/products/${item.productId}`);
+            if (productRes.success && productRes.data) {
+              const currentStock = Number(productRes.data.stock ?? 0);
+              await adminApi.put(`/products/${item.productId}`, { stock: Math.max(0, currentStock - item.quantity) });
+            }
+          }
+        }
+      }
     }
     setUpdating(false); setSelected(null); refetch();
   };
@@ -845,6 +864,11 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
                     <td className="px-3 py-2.5">
                       <p className="font-medium text-foreground">{o.orderNumber || o.id.slice(0, 8)}</p>
                       <p className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleDateString('id-ID')}</p>
+                      {o.OrderItems && o.OrderItems.length > 0 && (
+                        <p className="text-xs text-muted-foreground truncate max-w-[200px] mt-0.5">
+                          {o.OrderItems.map(i => i.productName).join(', ')}
+                        </p>
+                      )}
                     </td>
                     <td className="px-3 py-2.5 hidden sm:table-cell"><StatusBadge status={o.status} /></td>
                     <td className="px-3 py-2.5 hidden sm:table-cell">

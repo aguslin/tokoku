@@ -145,6 +145,11 @@ export default function ProductDetailPage() {
         productName: product.name,
         productImage: imageUrl,
         price: Number(product.price),
+        slug: product.slug,
+        sellerName: product.seller?.name,
+        stock: product.stock,
+        comparePrice: product.comparePrice ? Number(product.comparePrice) : undefined,
+        sold: product.sold,
       });
     }
   };
@@ -153,9 +158,7 @@ export default function ProductDetailPage() {
     ? product.ProductImages.map((img: any) => img.url)
     : ['/placeholder.svg'];
 
-  const mainImage = images[selectedImage];
-  const primaryImage = product.ProductImages?.find((img: any) => img.isPrimary);
-  const displayImage = primaryImage?.url || images[0];
+  const mainImage = images[selectedImage] || images[0];
 
   return (
     <main className="min-h-screen bg-background">
@@ -177,7 +180,7 @@ export default function ProductDetailPage() {
           <div className="space-y-4">
             <div className="relative h-80 lg:h-96 bg-muted rounded-xl overflow-hidden">
               <Image
-                src={displayImage}
+                src={mainImage}
                 alt={product.name}
                 fill
                 className="object-cover"

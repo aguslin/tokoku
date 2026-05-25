@@ -32,6 +32,11 @@ const cancelOrder = catchAsync(async (req, res) => {
   ApiResponse.success(res, data, 'Order cancelled successfully');
 });
 
+const confirmReceipt = catchAsync(async (req, res) => {
+  const data = await orderService.confirmReceipt(req.params.id, req.user.id);
+  ApiResponse.success(res, data, 'Receipt confirmed successfully');
+});
+
 module.exports = {
   createOrder,
   getUserOrders,
@@ -39,4 +44,5 @@ module.exports = {
   getOrderById,
   updateStatus,
   cancelOrder,
+  confirmReceipt,
 };

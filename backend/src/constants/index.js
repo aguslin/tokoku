@@ -5,6 +5,7 @@ const ORDER_STATUS = Object.freeze({
   PROCESSING: 'processing',
   SHIPPED: 'shipped',
   DELIVERED: 'delivered',
+  COMPLETED: 'completed',
   CANCELLED: 'cancelled',
   REFUNDED: 'refunded',
 });

@@ -10,28 +10,41 @@ Browser
   │     ├── /api/v1/*       →  rewrite to http://localhost:5000/api/v1/*
   │     └── /uploads/*      →  rewrite to http://localhost:5000/uploads/*
   │
-  └── http://localhost:3002  →  Frontend dev server (host, for fast iteration)
-        └── /api/v1/*       →  rewrite to http://localhost:5000/api/v1/*
+  ├── http://localhost:3000  →  Frontend dev mode (pnpm run dev)
+  │     └── /api/v1/*       →  rewrite to http://localhost:5000/api/v1/*
+  │
+  └── http://localhost:5000  →  Backend API (when running locally with npm run dev)
 ```
 
-## Ports
+## Ports & Dev Mode
 
-| Port | Service | Container | Status |
-|------|---------|-----------|--------|
-| 3000 | Old Next.js dev server (may be running) | Host | May conflict |
-| 3001 | Marketplace app (Next.js prod + Express) | marketplace-v2 | Docker Compose |
-| 3002 | Marketplace frontend dev server | Host (nohup) | For fast iteration |
-| 5000 | Backend API (inside app container) | marketplace-v2 | Exposed to host |
-| 5432 | PostgreSQL | marketplace-db | Internal |
-| 6379 | Redis | marketplace-redis | Internal |
+| Port | Service | Location | Notes |
+|------|---------|----------|-------|
+| 3000 | Frontend dev (Next.js) | Host: `pnpm run dev` | Fast iteration, hot reload |
+| 3001 | Frontend prod (Next.js standalone) | Docker: marketplace-v2 | Rebuild required for changes |
+| 5000 | Backend API (Express) | Both Docker & Host | Conflicts if both run |
+| 5432 | PostgreSQL | Docker: marketplace-db | Persistent volume |
+| 6379 | Redis | Docker: marketplace-redis | |
+
+**Dev mode (fast, no Docker rebuild):**
+```bash
+docker compose stop app        # stop the full container (frees port 5000)
+cd backend && npm run dev &     # backend on :5000 (nodemon, hot-reload)
+pnpm run dev                    # frontend on :3000 (Next.js dev, instant HMR)
+```
+
+**Docker rebuild (for production-like testing):**
+```bash
+docker compose up --build -d app
+```
 
 ## Containers (Docker Compose)
 
-| Container | Image | Network | Ports |
-|-----------|-------|---------|-------|
-| marketplace-v2 | marketplace-v2-app | marketplace-v2_marketplace-network | 3001→3001, 5000→5000 |
-| marketplace-db | postgres:15-alpine | marketplace-v2_marketplace-network | 5432 |
-| marketplace-redis | redis:7-alpine | marketplace-v2_marketplace-network | 6379 |
+| Container | Image | Ports |
+|-----------|-------|-------|
+| marketplace-v2 | marketplace-v2-app | 3001→3001, 5000→5000 |
+| marketplace-db | postgres:15-alpine | 5432 |
+| marketplace-redis | redis:7-alpine | 6379 |
 
 ## Admin Credentials
 
@@ -42,156 +55,158 @@ Browser
 
 ## Token Storage
 
-- Admin token stored in `localStorage` key: `admin-token` (separate from regular auth store)
-- Frontend reads it via `getAdminToken()` in `lib/api/admin.ts`
-- Admin layout has a manual token input in sidebar (for debugging)
+- **Admin token**: `localStorage` key `admin-token` (set manually via admin sidebar input)
+- **User auth**: `localStorage` key `auth-storage` (zustand persist from `useAuthStore`)
+- **Admin API client**: `lib/api/admin.ts` — reads `admin-token`, base URL `/api/v1`
+- **User API client**: reads from `auth-storage` for authenticated endpoints
 
-## Fixes Applied
+## Key Data Stores (Zustand persist — localStorage)
 
-### 1. Storage directory permissions (Docker volume)
-- **Problem**: Multer upload fails with `EACCES: permission denied, open '/app/backend/storage/uploads/...'` because `appuser` (UID 1001) can't write to host-mounted volume owned by `agus`
-- **Fix**: `chmod 777` on `backend/storage/uploads` and `backend/storage/logs`
-- **Files**: Volume mount in `docker-compose.yml:62`
+| Store Key | Module | Purpose |
+|-----------|--------|---------|
+| `order-storage` | `@/lib/store/order-store` | Local orders (created via checkout) |
+| `auth-storage` | `@/lib/store/auth-store` | User auth state + JWT |
+| `wishlist-storage` | `@/lib/store/wishlist-store` | Wishlist items |
+| `cart-storage` | `@/lib/store/cart-store` | Cart items |
+| `voucher-storage` | `@/lib/store/voucher-store` | Voucher codes |
 
-### 2. Product creation fails when no category selected
-- **Problem**: Frontend `handleSave` sends `categoryId: null` in payload. Backend express-validator `.optional()` does not skip `null` values (only skips undefined/missing keys). `isUUID()` fails on `null`. Result: validation error silently swallowed, modal closes, no product created.
-- **Fix**: `handleSave` now does `if (!form.categoryId) delete payload.categoryId` to omit the field entirely when empty
-- **Files**: `app/(admin)/dashboard/page.tsx:483`
+## Orders System — Architecture
 
-### 3. Silent error swallowing in product save
-- **Problem**: `handleSave` called `await adminApi.post(...)` but never checked the result — always closed modal and refetched regardless of success/failure
-- **Fix**: Added `if (!res.success) { toast.error(...); setSaving(false); return; }` — shows error toast and keeps modal open
-- **Files**: `app/(admin)/dashboard/page.tsx:484-492`
+### Two-tier order storage
+- **Backend DB (PostgreSQL)**: Real orders created via API → visible to admin via `GET /api/v1/orders/all`
+- **Frontend local (Zustand)**: Orders created via checkout flow (`addOrder`) — stored in localStorage under `order-storage`
 
-### 4. Sonner toast notifications
-- **Problem**: No toast notification system was rendered in admin layout, so errors were invisible
-- **Fix**: Added `<Toaster richColors closeButton position="top-right" />` to admin layout
-- **Files**: `app/(admin)/layout.tsx:138`
+### Admin dashboard order merging
+Admin page (`app/(admin)/dashboard/page.tsx:723-754`) merges both sources:
+```js
+const allOrders = [
+  ...(data || []),              // backend API orders
+  ...localOrders.filter(...     // local zustand orders (not already in API data)
+       .map(lo => ({
+         OrderItems: lo.items.map(...),   // local orders have `items` (lowercase)
+         Payments: [...],                  // derived from status/proof
+       }))
+];
+```
 
-### 5. Docker build pipeline
-- **Problem**: Original Dockerfile had issues with pnpm (frozen-lockfile, permissions)
-- **Fix**: Added `ENV CI=true` and `ENV PNPM_CONFIRM_MODULES_PURGE=false`; optimized build stages
-- **Files**: `Dockerfile:18-19`
+### Order status flow (frontend)
+```
+pending → paid → confirmed → processing → packed → shipped → delivered → completed
+                                                                    ↓
+                                                              cancelled / refunded
+```
 
-### 6. Backend startup
-- **Problem**: `backend/storage/logs` dir didn't exist on host, volume mount failed silently
-- **Fix**: Created the directory on host, set permissions to 777
-- **Files**: Volume mount at `docker-compose.yml:62`
+### Order status flow (backend ORDER_STATUS constants in `backend/src/constants/index.js`)
+```
+pending → paid → confirmed → processing → shipped → delivered → completed
+                                                                    ↓
+                                                              cancelled / refunded
+```
+Note: Backend has `packed` missing from ORDER_STATUS (but may still appear in frontend).
 
-## Known Validator Behavior
+### Payment status flow
+```
+pending → submitted → paid → (none)
+  ↑          ↑
+  |          └── User uploads proof → order=paid
+  └── No proof uploaded yet
+```
 
-Backend `product.validator.js`:
-- `name`: required, max 200 chars
-- `description`: required, trimmed, notEmpty
-- `price`: required, positive float
-- `stock`: required, non-negative int
-- `categoryId`: optional, UUID if present
-  - `body('categoryId').optional().isUUID()` — `.optional()` only skips **missing keys** or `undefined`, NOT `null`
-  - Sending `"categoryId": null` → validation fails
-  - Sending no `categoryId` key → passes validation (becomes `null` in DB)
-- Images are optional in create; multer handles file upload separately
+## Changes Made
+
+### Marketplace page (`app/(user)/marketplace/page.tsx`)
+- Product grid: `grid-cols-2 sm:grid-cols-4 lg:grid-cols-4` (4 columns on mobile)
+- Image heights: `h-28 sm:h-48` (smaller on mobile)
+- "Semua Produk" heading removed
+- "Tambah ke Keranjang" button hidden on mobile via `hidden sm:block`
+- Shows "N terjual" when `sold > 0`
+- Wishlist add button sends extra fields (slug, sellerName, stock, comparePrice, sold)
+
+### Product detail page (`app/(user)/marketplace/[id]/page.tsx`)
+- Fixed image gallery bug: `displayImage` was dead variable pointing to primary image; now uses `mainImage` = `images[selectedImage]`
+- Wishlist add includes extra fields
+
+### User orders page (`app/(user)/orders/page.tsx`)
+- Filter tabs: Semua, Belum Bayar, Dikemas, Dikirim, Selesai, Pengembalian, Dibatalkan
+- Order cards: square product image left (20%), status text-only top-right, product name below, date+xN below, total bottom-right
+- Whole card is a `<Link>` — no separate Detail button
+- Reduced padding, heading closer to top
+
+### Order detail page (`app/(user)/orders/[id]/page.tsx`)
+- Calls `POST /api/v1/orders/:id/confirm-receipt` with auth token from `auth-storage` localStorage
+- After success, updates local order status via `useOrderStore`
+
+### Wishlist page (`app/(user)/wishlist/page.tsx`)
+- Card layout matches marketplace: `grid-cols-2 sm:grid-cols-4`, `h-28 sm:h-48`
+- Removed unused cart/trash action buttons
+- Shows "N terjual" when `sold > 0`
+
+### Wishlist store (`lib/store/wishlist-store.ts`)
+- Extended `WishlistItem` interface with optional fields: `slug`, `sellerName`, `stock`, `comparePrice`, `sold`
+
+### Admin orders table (`app/(admin)/dashboard/page.tsx`)
+- Extended `Order` interface with `OrderItems?` field
+- Displays product names in each order row
+
+### Admin status update & stock/sold flow (`app/(admin)/dashboard/page.tsx:783-803`)
+- `updateStatus()` calls `PUT /api/v1/orders/:id/status`
+- If API fails (local-only order), falls back to `updateLocalOrderStatus()`
+- If new status = `shipped` AND API failed: tries to decrement stock via `PUT /api/v1/products/:id` for each order item
+- Uses `adminApi` (reads `admin-token` from localStorage)
+
+### Backend order service (`backend/src/services/order.service.js`)
+- `updateStatus`: stock decrements on transition to `shipped` via `Product.decrement('stock', { by: item.quantity })`
+- `confirmReceipt`: transitions `delivered → completed`, increments `sold` via `Product.increment('sold', { by: item.quantity })`
+
+### Backend routes (`backend/src/routes/order.routes.js`)
+- `POST /:id/confirm-receipt` — authenticated (not admin-only), calls `confirmReceipt`
+
+### Migration (`backend/src/migrations/20240101000023-add-sold-to-products.js`)
+- Added `sold` column (INTEGER, default 0) to `products` table
+- Run manually inside container because Umzug glob `src/migrations/*.js` resolved from CWD `/app` (not `/app/backend`)
+- **Fix applied**: `backend/server.js` now uses `__dirname + '/src/migrations/*.js'` for absolute path
+
+## Current Issues / Bugs
+
+### [BUG] Admin orders page shows "Belum ada pesanan" — local orders not appearing
+- **Symptom**: Admin page shows "Belum ada pesanan" even when local zustand store has orders (user orders page works fine)
+- **Probable cause**: localStorage `order-storage` key exists on port 3000 (user page) but not on port 3001 (admin Docker). localStorage is per-origin/port, so after switching to dev mode (port 3000), the orders stored under port 3000's localStorage aren't visible on Docker's port 3001. Need to check if orders appear on port 3001 admin page when created on port 3001.
+- **To debug**: On the relevant port's admin page, check `JSON.parse(localStorage.getItem('order-storage'))` in console
+
+### [BUG] Stock not decreasing when admin changes order to "Dikirim"
+- **Symptom**: Admin changes order status to "Dikirim" (shipped), but product stock doesn't decrease
+- **Causes**:
+  1. **Orders are local-only (not in backend DB)**: `PUT /api/v1/orders/:id/status` returns 404, falls back to `updateLocalOrderStatus` only
+  2. **Fallback stock decrement may fail**: Admin page tries `adminApi.get('/products/:id')` then `adminApi.put('/products/:id', { stock })` — may fail silently (network, auth, or product not found)
+  3. **No error surface**: All failures are silent (no toast, no console log visible to user)
+- **Affected code**: `app/(admin)/dashboard/page.tsx:783-803`
+
+### [BUG] Sold not increasing when user confirms receipt
+- **Symptom**: User clicks "Pesanan Diterima" on `orders/[id]` page, but product sold count doesn't increase
+- **Causes**:
+  1. **Orders are local-only**: `POST /api/v1/orders/:id/confirm-receipt` returns 404 (order not in backend), never reaches `confirmReceipt` service function
+  2. **No local fallback**: Unlike admin status update, there's no fallback code to increment sold locally
+- **Affected code**: `app/(user)/orders/[id]/page.tsx` — calls API but doesn't handle failure case
+
+### [BUG] Backend validation error fix not persistent
+- **Problem**: `backend/app.js:64` fix (changing validation error check from `err.name === 'ValidationError'` to `err.errors && Array.isArray(err.errors)`) was applied via `docker cp` — lost on container restart
+- **Fix**: Needs Docker rebuild to persist
 
 ## Upload Flow
 
 1. Frontend creates `FormData` with files
 2. POST to `${apiUrl}/upload/images` with `Authorization: Bearer <admin-token>`
-3. Multer middleware (in `backend/src/middlewares/upload.js`) saves to `../../storage/uploads/` (relative to middlewares dir)
+3. Multer middleware saves to `../../storage/uploads/`
 4. Returns `{ success: true, data: [{ url: '/uploads/<uuid>.<ext>', name, size, mimetype }] }`
-5. Frontend stores URLs in `uploadedImages` state array
-6. On save, product payload includes `images: [{ url, isPrimary, sortOrder }]`
-7. Backend serves static files from `storage/uploads` via `express.static`
-8. Next.js rewrite proxies `/uploads/:path*` → `http://localhost:5000/uploads/:path*`
+5. Product payload includes `images: [{ url, isPrimary, sortOrder }]`
+6. Backend serves static files from `storage/uploads` via `express.static`
+7. Next.js rewrite proxies `/uploads/:path*` → `http://localhost:5000/uploads/:path*`
 
-## Image Upload Restrictions (multer)
-- Allowed MIME types: `image/jpeg`, `image/png`, `image/webp` (no SVG!)
-- File size limit: 5MB (configurable in multer middleware)
+## Known Environment Details
 
-## Fast Development Loop
-
-When making frontend changes, use host dev server instead of rebuilding Docker:
-
-```bash
-# Start dev server (if not running)
-cd /home/agus/ProgramProject/marketplace-v2
-nohup env PORT=3002 npx next dev > /tmp/next-dev.log 2>&1 &
-
-# Frontend changes are live at http://localhost:3002
-# Backend API is accessible via built-in rewrites → Docker backend on port 5000
-```
-
-To rebuild Docker image (for production):
-```bash
-docker compose build app
-docker compose up -d app
-```
-
-### 7. Validation error response missing field details
-- **Problem**: `backend/app.js` error handler checked `err.name === 'ValidationError'` but `ApiError` instances (from `validate.js` middleware) have `name: "Error"` (default from `Error` class). Field-level errors (`apiError.errors`) were discarded.
-- **Fix**: Changed condition from `err.name === 'ValidationError'` to `err.errors && Array.isArray(err.errors)` — catches any error with field-level errors regardless of `err.name`
-- **Files**: `backend/app.js:64`
-- **Note**: This was applied to the running Docker container via `docker cp`. It will NOT persist across container restart. Must rebuild Docker image or re-apply `docker cp` after restart.
-
-### 8. Frontend adminApi hides field-level validation errors
-- **Problem**: `adminApi.request` returned only `json.message` (e.g., "Validation failed") without appended field errors
-- **Fix**: When `json.errors` exists, append them to error message (e.g., `"Validation failed: Product description is required."`)
-- **Files**: `lib/api/admin.ts:43-46`
-
-## Deploying Backend Changes to Docker
-
-After editing backend files, apply them to the running container:
-```bash
-docker cp backend/app.js marketplace-v2:/app/backend/app.js
-docker exec -d marketplace-v2 sh -c "sleep 2 && PORT=5000 node /app/backend/server.js"
-```
-⚠️ Changes don't persist across container restart — you must rebuild the Docker image for permanent deployment.
-
-## Verification
-
-- ✅ Product creation confirmed working on `http://192.168.1.3:3001` (Docker production)
-- ✅ Toast notifications visible (success/error)
-- ✅ Validation errors show specific field details (e.g., "Product description is required.")
-- ✅ Image upload working (fixed permissions on `storage/uploads/`)
-
-### 9. Order/payment status flow redesign
-- **Problem**: Old flow auto-confirmed orders on payment proof upload (order→`confirmed`, payment→`paid`). Admin had no chance to verify payment proof. Payment badge showed misleading "Menunggu Konfirmasi" for `paid` status.
-- **Fix**: Two-step verification flow:
-  - User uploads proof → order=`paid` (Menunggu Konfirmasi), payment=`submitted` (Menunggu Verifikasi)
-  - Admin reviews proof, clicks Dikonfirmasi → order=`confirmed` (Dikonfirmasi), payment=`paid` (Dibayar)
-- **Changes**:
-  - Added `ORDER_STATUS.PAID` and `PAYMENT_STATUS.SUBMITTED` to `backend/src/constants/index.js`
-  - `submitPaymentProof` sets order to `paid`, payment to `submitted` (`backend/src/services/payment.service.js`)
-  - `updateStatus` allows `paid`→`confirmed` transition; on confirm updates payment to `paid`; on cancel from `paid` fails the payment (`backend/src/services/order.service.js`)
-  - Added `cancelOrder` support for `paid` status with payment fail (`backend/src/services/order.service.js`)
-  - Added `paid` to validator allowed list (`backend/src/validators/order.validator.js`)
-  - Created separate `PaymentStatusBadge` component with `PAYMENT_STATUS_LABELS`/`PAYMENT_STATUS_STYLES` maps (`app/(admin)/dashboard/page.tsx`)
-  - Payment labels: `paid`→Dibayar (green), `submitted`→Menunggu Verifikasi (blue)
-  - Local order payment mapping now derives from order status instead of being static
-- **Files**: `backend/src/constants/index.js`, `backend/src/services/payment.service.js`, `backend/src/services/order.service.js`, `backend/src/validators/order.validator.js`, `app/(admin)/dashboard/page.tsx`
-
-### 10. Checkout empty cart flash during payment processing
-- **Problem**: When clicking "Bayar", `clearCart()` emptied the cart before the redirect timeout (1500ms). React re-rendered with empty items, and the `items.length === 0` guard showed "Keranjang Anda kosong". On top of that, `setIsProcessing(false)` ran before `router.push()` inside the timeout, triggering another render that passed the guard.
-- **Fix**: Two changes:
-  - Added `!isProcessing` to the empty cart guard: `if (items.length === 0 && !isProcessing)`
-  - Removed `setIsProcessing(false)` from the redirect timeout — state reset is unnecessary when navigating away
-- **Files**: `app/(user)/checkout/page.tsx`
-
-### 11. Admin order page — summary cards + priority sorting + column filters
-- **Feature**: Added clickable summary cards at top of the order table showing actionable counts:
-  - 📋 Semua (all), ⏳ Perlu Dikonfirmasi (paid), 📦 Siap Diproses (confirmed), ⚙️ Sedang Diproses (processing), 🚚 Sedang Dikirim (shipped)
-  - Click a card to filter the table by that status; active card highlighted
-  - Compact layout: `grid-cols-2 sm:grid-cols-5 gap-1.5`, `p-1.5`, horizontal row style
-- **Feature**: Excel-style column header dropdown filters:
-  - **Status** column header has `<select>` with all order statuses (Menunggu Pembayaran, Menunggu Konfirmasi, etc.)
-  - **Pembayaran** column header has `<select>` with all payment statuses (Dibayar, Menunggu Verifikasi, Gagal, etc.)
-  - Both filters combine independently with each other and with the search bar
-  - Summary cards and Status dropdown share the same `statusFilter` state — clicking a card syncs the dropdown
-- **Feature**: Priority sorting — within any filter, orders sorted by action priority:
-  `paid` → `confirmed` → `processing` → `shipped` → `pending` → `delivered` → ...
-- **Files**: `app/(admin)/dashboard/page.tsx`
-
-## Current Issues / TODOs
-
-- [ ] **Hostinger deployment**: memory.md still references old separate-container setup (marketplace-frontend, marketplace-api); needs updates for Docker Compose deployment
-- [ ] **Non-admin product creation**: User-facing product management not verified
-- [ ] **Image display in table**: After upload + save, verify images render correctly in product list
-- [ ] **Empty state UX**: Product section shows "Belum ada produk" with no "Tambah" button when empty — user can't add first product from empty state
+- `NEXT_PUBLIC_API_URL=/api/v1` (`.env.local`)
+- Backend `DB_HOST=localhost`, `REDIS_URL=redis://localhost:6379` (for host dev mode)
+- Docker overrides: `DB_HOST=db`, `REDIS_URL=redis://redis:6379`
+- TypeScript build errors are IGNORED: `next.config.mjs` has `typescript: { ignoreBuildErrors: true }`
+- `next.config.mjs` has `output: 'standalone'` for Docker deployment
+- Order confirm-receipt frontend reads auth token from `localStorage('auth-storage')` to match existing payment API pattern

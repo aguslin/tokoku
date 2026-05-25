@@ -12,5 +12,6 @@ router.get('/all', authorize('admin'), orderController.getAllOrders);
 router.get('/:id', orderController.getOrderById);
 router.put('/:id/status', authorize('admin'), orderController.updateStatus);
 router.post('/:id/cancel', orderController.cancelOrder);
+router.post('/:id/confirm-receipt', orderController.confirmReceipt);
 
 module.exports = router;

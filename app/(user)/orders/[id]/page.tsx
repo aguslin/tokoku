@@ -286,7 +286,26 @@ export default function OrderDetailPage() {
             Kembali
           </Button>
           {order.status === 'delivered' && (
-            <Button variant="primary" onClick={() => updateStatus(order.id, 'completed')}>Konfirmasi Penerimaan</Button>
+            <Button variant="primary" onClick={async () => {
+              try {
+                const token = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.token;
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+                const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+                if (token) headers['Authorization'] = `Bearer ${token}`;
+                const res = await fetch(`${apiUrl}/orders/${order.id}/confirm-receipt`, {
+                  method: 'POST',
+                  headers,
+                });
+                const json = await res.json();
+                if (json.success) {
+                  updateStatus(order.id, 'completed');
+                } else {
+                  alert(json.message || 'Gagal mengonfirmasi penerimaan');
+                }
+              } catch {
+                alert('Gagal mengonfirmasi penerimaan');
+              }
+            }}>Konfirmasi Penerimaan</Button>
           )}
         </div>
       </div>

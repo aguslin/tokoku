@@ -13,7 +13,7 @@ const SequelizeLib = require('sequelize');
 async function runMigrations() {
   const umzug = new Umzug({
     migrations: {
-      glob: 'src/migrations/*.js',
+      glob: __dirname + '/src/migrations/*.js',
       resolve: ({ name, path, context }) => {
         const migration = require(path);
         return {

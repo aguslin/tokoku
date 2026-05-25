@@ -2,29 +2,14 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Heart, ShoppingCart, Trash2, ArrowLeft } from 'lucide-react';
+import { Heart, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { formatCurrency } from '@/lib/utils/currency';
-import { useWishlistStore, useCartStore } from '@/lib/store';
+import { useWishlistStore } from '@/lib/store';
 
 export default function WishlistPage() {
   const { items, removeItem } = useWishlistStore();
-  const { addItem } = useCartStore();
-
-  const moveToCart = (item: any) => {
-    addItem({
-      id: `${item.productId}-${Date.now()}`,
-      productId: item.productId,
-      productName: item.productName,
-      productImage: item.productImage,
-      price: item.price,
-      quantity: 1,
-      sellerName: '',
-      sellerVerified: false,
-    });
-    removeItem(item.productId);
-  };
 
   return (
     <main className="min-h-screen bg-background">
@@ -51,22 +36,46 @@ export default function WishlistPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-4 gap-3 sm:gap-4">
             {items.map((item) => (
-              <Card key={item.productId} className="overflow-hidden flex flex-col">
-                <div className="relative h-48 bg-muted -mx-4 -mt-4 -mb-4">
-                  <Image src={item.productImage} alt={item.productName} fill className="object-cover" />
-                </div>
-                <div className="flex-1 mt-4 space-y-2">
-                  <h3 className="font-semibold text-foreground line-clamp-2 text-sm">{item.productName}</h3>
-                  <p className="text-lg font-bold text-primary">{formatCurrency(item.price)}</p>
-                </div>
-                <div className="flex gap-2 mt-4">
-                  <Button size="sm" fullWidth icon={<ShoppingCart className="w-4 h-4" />} onClick={() => moveToCart(item)}>
-                    Keranjang
-                  </Button>
-                  <Button size="sm" variant="destructive" icon={<Trash2 className="w-4 h-4" />} onClick={() => removeItem(item.productId)} />
-                </div>
+              <Card key={item.productId} hoverable className="overflow-hidden flex flex-col relative">
+                <Link href={`/marketplace/${item.slug || item.productId}`}>
+                  <div className="relative h-28 sm:h-48 bg-muted mb-2 sm:mb-4 -mx-4 -mt-4 -mb-4">
+                    <div className="absolute inset-0">
+                      <Image src={item.productImage} alt={item.productName} fill className="object-cover" />
+                    </div>
+                  </div>
+                </Link>
+
+                <button
+                  onClick={() => removeItem(item.productId)}
+                  className="absolute top-2 left-2 p-2 bg-white rounded-full hover:bg-primary/10 transition-colors z-10"
+                >
+                  <Heart className="w-4 h-4 fill-destructive text-destructive" />
+                </button>
+
+                <Link href={`/marketplace/${item.slug || item.productId}`} className="flex-1">
+                  <div className="space-y-1 sm:space-y-2">
+                    {item.sellerName && (
+                      <p className="text-xs text-muted-foreground">{item.sellerName}</p>
+                    )}
+                    <h3 className="font-semibold text-foreground line-clamp-2 text-xs sm:text-sm">{item.productName}</h3>
+                  </div>
+
+                  <div className="mt-2 sm:mt-3 space-y-1 sm:space-y-2">
+                    <div className="flex items-baseline gap-1 sm:gap-2">
+                      <span className="text-sm sm:text-lg font-bold text-primary">{formatCurrency(item.price)}</span>
+                      {item.comparePrice && item.comparePrice > 0 && (
+                        <span className="text-[10px] sm:text-sm text-muted-foreground line-through">
+                          {formatCurrency(item.comparePrice)}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] sm:text-xs text-muted-foreground">
+                      {item.sold > 0 && `${item.sold} terjual`}
+                    </p>
+                  </div>
+                </Link>
               </Card>
             ))}
           </div>
