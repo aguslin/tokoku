@@ -29,7 +29,7 @@ const updateOrderStatus = [
     .trim()
     .notEmpty()
     .withMessage('Order status is required.')
-    .isIn(['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'])
+    .isIn(['pending', 'paid', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled', 'refunded'])
     .withMessage('Invalid order status.'),
   validate,
 ];

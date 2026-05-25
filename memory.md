@@ -152,10 +152,45 @@ docker exec -d marketplace-v2 sh -c "sleep 2 && PORT=5000 node /app/backend/serv
 - ✅ Validation errors show specific field details (e.g., "Product description is required.")
 - ✅ Image upload working (fixed permissions on `storage/uploads/`)
 
+### 9. Order/payment status flow redesign
+- **Problem**: Old flow auto-confirmed orders on payment proof upload (order→`confirmed`, payment→`paid`). Admin had no chance to verify payment proof. Payment badge showed misleading "Menunggu Konfirmasi" for `paid` status.
+- **Fix**: Two-step verification flow:
+  - User uploads proof → order=`paid` (Menunggu Konfirmasi), payment=`submitted` (Menunggu Verifikasi)
+  - Admin reviews proof, clicks Dikonfirmasi → order=`confirmed` (Dikonfirmasi), payment=`paid` (Dibayar)
+- **Changes**:
+  - Added `ORDER_STATUS.PAID` and `PAYMENT_STATUS.SUBMITTED` to `backend/src/constants/index.js`
+  - `submitPaymentProof` sets order to `paid`, payment to `submitted` (`backend/src/services/payment.service.js`)
+  - `updateStatus` allows `paid`→`confirmed` transition; on confirm updates payment to `paid`; on cancel from `paid` fails the payment (`backend/src/services/order.service.js`)
+  - Added `cancelOrder` support for `paid` status with payment fail (`backend/src/services/order.service.js`)
+  - Added `paid` to validator allowed list (`backend/src/validators/order.validator.js`)
+  - Created separate `PaymentStatusBadge` component with `PAYMENT_STATUS_LABELS`/`PAYMENT_STATUS_STYLES` maps (`app/(admin)/dashboard/page.tsx`)
+  - Payment labels: `paid`→Dibayar (green), `submitted`→Menunggu Verifikasi (blue)
+  - Local order payment mapping now derives from order status instead of being static
+- **Files**: `backend/src/constants/index.js`, `backend/src/services/payment.service.js`, `backend/src/services/order.service.js`, `backend/src/validators/order.validator.js`, `app/(admin)/dashboard/page.tsx`
+
+### 10. Checkout empty cart flash during payment processing
+- **Problem**: When clicking "Bayar", `clearCart()` emptied the cart before the redirect timeout (1500ms). React re-rendered with empty items, and the `items.length === 0` guard showed "Keranjang Anda kosong". On top of that, `setIsProcessing(false)` ran before `router.push()` inside the timeout, triggering another render that passed the guard.
+- **Fix**: Two changes:
+  - Added `!isProcessing` to the empty cart guard: `if (items.length === 0 && !isProcessing)`
+  - Removed `setIsProcessing(false)` from the redirect timeout — state reset is unnecessary when navigating away
+- **Files**: `app/(user)/checkout/page.tsx`
+
+### 11. Admin order page — summary cards + priority sorting + column filters
+- **Feature**: Added clickable summary cards at top of the order table showing actionable counts:
+  - 📋 Semua (all), ⏳ Perlu Dikonfirmasi (paid), 📦 Siap Diproses (confirmed), ⚙️ Sedang Diproses (processing), 🚚 Sedang Dikirim (shipped)
+  - Click a card to filter the table by that status; active card highlighted
+  - Compact layout: `grid-cols-2 sm:grid-cols-5 gap-1.5`, `p-1.5`, horizontal row style
+- **Feature**: Excel-style column header dropdown filters:
+  - **Status** column header has `<select>` with all order statuses (Menunggu Pembayaran, Menunggu Konfirmasi, etc.)
+  - **Pembayaran** column header has `<select>` with all payment statuses (Dibayar, Menunggu Verifikasi, Gagal, etc.)
+  - Both filters combine independently with each other and with the search bar
+  - Summary cards and Status dropdown share the same `statusFilter` state — clicking a card syncs the dropdown
+- **Feature**: Priority sorting — within any filter, orders sorted by action priority:
+  `paid` → `confirmed` → `processing` → `shipped` → `pending` → `delivered` → ...
+- **Files**: `app/(admin)/dashboard/page.tsx`
+
 ## Current Issues / TODOs
 
-- [ ] **Rebuild Docker image**: `backend/app.js` fix was `docker cp`'d into running container — will reset on container restart. Run `docker compose build --no-cache app` to make permanent
-- [ ] **Rebuild Docker for frontend fixes**: Docker frontend still has code from before `handleSave`/toast/`adminApi` edits. Run `docker compose build --no-cache app` to include them
 - [ ] **Hostinger deployment**: memory.md still references old separate-container setup (marketplace-frontend, marketplace-api); needs updates for Docker Compose deployment
 - [ ] **Non-admin product creation**: User-facing product management not verified
 - [ ] **Image display in table**: After upload + save, verify images render correctly in product list

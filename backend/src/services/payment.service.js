@@ -15,7 +15,7 @@ const createPayment = async (orderId, paymentMethodId) => {
   }
 
   const existingPayment = await Payment.findOne({
-    where: { orderId, status: PAYMENT_STATUS.PAID },
+    where: { orderId, status: [PAYMENT_STATUS.SUBMITTED, PAYMENT_STATUS.PAID] },
   });
   if (existingPayment) {
     throw ApiError.badRequest('Order has already been paid');
@@ -125,14 +125,12 @@ const submitPaymentProof = async (orderId, userId, proofUrl) => {
   metadata.submittedAt = new Date().toISOString();
 
   await payment.update({
-    status: PAYMENT_STATUS.PAID,
-    paidAt: new Date(),
-    transactionId: `MANUAL-${Date.now()}`,
+    status: PAYMENT_STATUS.SUBMITTED,
     metadata,
   });
 
   await Order.update(
-    { status: ORDER_STATUS.CONFIRMED, paidAt: new Date() },
+    { status: ORDER_STATUS.PAID, paidAt: new Date() },
     { where: { id: orderId } },
   );
 

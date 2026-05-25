@@ -337,6 +337,7 @@ const updateStatus = async (orderId, status) => {
 
   const validTransitions = {
     [ORDER_STATUS.PENDING]: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED],
+    [ORDER_STATUS.PAID]: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED],
     [ORDER_STATUS.CONFIRMED]: [ORDER_STATUS.PROCESSING, ORDER_STATUS.CANCELLED],
     [ORDER_STATUS.PROCESSING]: [ORDER_STATUS.SHIPPED, ORDER_STATUS.CANCELLED],
     [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.DELIVERED],
@@ -349,8 +350,20 @@ const updateStatus = async (orderId, status) => {
   }
 
   const updates = { status };
+  if (status === ORDER_STATUS.CONFIRMED) {
+    await Payment.update(
+      { status: 'paid', paidAt: new Date() },
+      { where: { orderId } },
+    );
+  }
   if (status === ORDER_STATUS.DELIVERED) {
     updates.deliveredAt = new Date();
+  }
+  if (status === ORDER_STATUS.CANCELLED && order.status === ORDER_STATUS.PAID) {
+    await Payment.update(
+      { status: 'failed' },
+      { where: { orderId, status: 'submitted' } },
+    );
   }
   if (status === ORDER_STATUS.CANCELLED) {
     updates.cancelledAt = new Date();
@@ -369,9 +382,16 @@ const cancelOrder = async (orderId, userId, reason) => {
     throw ApiError.forbidden('You are not authorized to cancel this order');
   }
 
-  const cancellableStatuses = [ORDER_STATUS.PENDING, ORDER_STATUS.CONFIRMED];
+  const cancellableStatuses = [ORDER_STATUS.PENDING, ORDER_STATUS.PAID, ORDER_STATUS.CONFIRMED];
   if (!cancellableStatuses.includes(order.status)) {
     throw ApiError.badRequest('Order cannot be cancelled at this stage');
+  }
+
+  if (order.status === ORDER_STATUS.PAID) {
+    await Payment.update(
+      { status: 'failed' },
+      { where: { orderId, status: 'submitted' } },
+    );
   }
 
   await order.update({

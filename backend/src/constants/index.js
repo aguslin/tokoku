@@ -1,5 +1,6 @@
 const ORDER_STATUS = Object.freeze({
   PENDING: 'pending',
+  PAID: 'paid',
   CONFIRMED: 'confirmed',
   PROCESSING: 'processing',
   SHIPPED: 'shipped',
@@ -10,6 +11,7 @@ const ORDER_STATUS = Object.freeze({
 
 const PAYMENT_STATUS = Object.freeze({
   PENDING: 'pending',
+  SUBMITTED: 'submitted',
   PAID: 'paid',
   FAILED: 'failed',
   REFUNDED: 'refunded',

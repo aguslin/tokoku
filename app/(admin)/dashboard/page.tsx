@@ -47,6 +47,24 @@ const STATUS_STYLES: Record<string, string> = {
   refunded: 'bg-destructive/10 text-destructive',
 };
 
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  pending: 'Menunggu Pembayaran',
+  submitted: 'Menunggu Verifikasi',
+  paid: 'Dibayar',
+  failed: 'Gagal',
+  refunded: 'Dikembalikan',
+  partially_refunded: 'Dikembalikan Sebagian',
+};
+
+const PAYMENT_STATUS_STYLES: Record<string, string> = {
+  pending: 'bg-warning/10 text-warning',
+  submitted: 'bg-blue-100 text-blue-600',
+  paid: 'bg-success/10 text-success',
+  failed: 'bg-destructive/10 text-destructive',
+  refunded: 'bg-destructive/10 text-destructive',
+  partially_refunded: 'bg-warning/10 text-warning',
+};
+
 const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 
 function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?: string }>) {
@@ -166,6 +184,14 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_STYLES[status] || 'bg-muted text-muted-foreground'}`}>
       {STATUS_LABELS[status] || status.charAt(0).toUpperCase() + status.slice(1)}
+    </span>
+  );
+}
+
+function PaymentStatusBadge({ status }: { status: string }) {
+  return (
+    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${PAYMENT_STATUS_STYLES[status] || 'bg-muted text-muted-foreground'}`}>
+      {PAYMENT_STATUS_LABELS[status] || status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
 }
@@ -689,6 +715,8 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
   const [selected, setSelected] = useState<Order | null>(null);
   const [newStatus, setNewStatus] = useState('');
   const [updating, setUpdating] = useState(false);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [paymentFilter, setPaymentFilter] = useState('');
   const localOrders = useOrderStore((s) => s.orders);
   const updateLocalOrderStatus = useOrderStore((s) => s.updateStatus);
 
@@ -705,12 +733,12 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
       createdAt: lo.createdAt,
       userId: '',
       paidAt: lo.paymentProofUploadedAt || null,
-      Payments: lo.paymentProof ? [{
+      Payments: (lo.paymentProof || lo.status === 'paid' || lo.status === 'confirmed' || lo.status === 'processing' || lo.status === 'shipped' || lo.status === 'delivered' || lo.status === 'completed') ? [{
         id: '',
-        status: lo.paymentProof ? 'paid' : 'pending',
+        status: ['confirmed', 'processing', 'shipped', 'delivered', 'completed'].includes(lo.status) ? 'paid' : lo.paymentProof ? 'submitted' : 'pending',
         paymentMethodId: '',
         amount: lo.total,
-        paidAt: lo.paymentProofUploadedAt || null,
+        paidAt: ['confirmed', 'processing', 'shipped', 'delivered', 'completed'].includes(lo.status) ? new Date().toISOString() : null,
         transactionId: null,
         metadata: lo.paymentProof ? { proofUrl: lo.paymentProof } : null,
         PaymentMethod: lo.paymentMethod ? { id: '', name: lo.paymentMethod, code: '' } : null,
@@ -718,9 +746,32 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
     })),
   ];
 
-  const filtered = allOrders.filter((o: Order) =>
-    (o.orderNumber || o.id)?.toLowerCase().includes(search.toLowerCase())
-  );
+  const STATUS_CARDS = [
+    { key: '', label: 'Semua', color: 'bg-primary/10 text-primary', icon: '📋' },
+    { key: 'paid', label: 'Perlu Dikonfirmasi', color: 'bg-blue-100 text-blue-600', icon: '⏳' },
+    { key: 'confirmed', label: 'Siap Diproses', color: 'bg-info/10 text-info', icon: '📦' },
+    { key: 'processing', label: 'Sedang Diproses', color: 'bg-warning/10 text-warning', icon: '⚙️' },
+    { key: 'shipped', label: 'Sedang Dikirim', color: 'bg-primary/10 text-primary', icon: '🚚' },
+  ];
+
+  const counts = allOrders.reduce((acc: Record<string, number>, o) => {
+    acc[o.status] = (acc[o.status] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const PRIORITY: Record<string, number> = {
+    paid: 0, confirmed: 1, processing: 2, shipped: 3,
+    pending: 4, delivered: 5, completed: 6, cancelled: 7, refunded: 8,
+  };
+
+  const filtered = allOrders
+    .filter((o: Order) => {
+      if (statusFilter && o.status !== statusFilter) return false;
+      const p = getLatestPayment(o);
+      if (paymentFilter && p?.status !== paymentFilter) return false;
+      return (o.orderNumber || o.id)?.toLowerCase().includes(search.toLowerCase());
+    })
+    .sort((a, b) => (PRIORITY[a.status] ?? 99) - (PRIORITY[b.status] ?? 99));
 
   const updateStatus = async () => {
     if (!selected || !newStatus || newStatus === selected.status) return;
@@ -734,19 +785,54 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
 
   if (loading) return <TableSkeleton />;
   if (error) return <ErrorState message={error} onRetry={refetch} />;
-  if (!filtered.length) return <EmptyState message="Belum ada pesanan" />;
+  if (!allOrders.length) return <EmptyState message="Belum ada pesanan" />;
 
   return (
     <div className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
+        {STATUS_CARDS.map(card => {
+          const count = card.key === '' ? allOrders.length : (counts[card.key] || 0);
+          const isActive = statusFilter === card.key;
+          return (
+            <button key={card.key} onClick={() => setStatusFilter(card.key)}
+              className={`flex items-center gap-1.5 p-1.5 rounded-lg border transition-all text-xs ${
+                isActive ? 'border-primary ring-1 ring-primary ' + card.color : 'border-border bg-white hover:border-primary/50'
+              }`}>
+              <span>{card.icon}</span>
+              <span className="font-medium truncate">{card.label}</span>
+              <span className={`font-bold ml-auto ${isActive ? '' : 'text-foreground'}`}>{count}</span>
+            </button>
+          );
+        })}
+      </div>
       <SearchBar value={search} onChange={setSearch} placeholder="Cari pesanan..." />
+      {!filtered.length ? (
+        <EmptyState message="Tidak ada pesanan dengan filter ini" />
+      ) : (
       <div className="bg-white rounded-lg border border-border overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border bg-sky-50">
                 <th className="px-3 py-2.5 text-left font-semibold">Pesanan</th>
-                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Status</th>
-                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Pembayaran</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">
+                  <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+                    className="bg-transparent text-xs font-semibold cursor-pointer outline-none max-w-[130px]">
+                    <option value="">Status: Semua</option>
+                    {Object.entries(STATUS_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">
+                  <select value={paymentFilter} onChange={e => setPaymentFilter(e.target.value)}
+                    className="bg-transparent text-xs font-semibold cursor-pointer outline-none max-w-[150px]">
+                    <option value="">Pembayaran: Semua</option>
+                    {Object.entries(PAYMENT_STATUS_LABELS).map(([k, v]) => (
+                      <option key={k} value={k}>{v}</option>
+                    ))}
+                  </select>
+                </th>
                 <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Total</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Aksi</th>
               </tr>
@@ -763,7 +849,7 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
                     <td className="px-3 py-2.5 hidden sm:table-cell"><StatusBadge status={o.status} /></td>
                     <td className="px-3 py-2.5 hidden sm:table-cell">
                       {payment ? (
-                        <StatusBadge status={payment.status} />
+                        <PaymentStatusBadge status={payment.status} />
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}
@@ -778,8 +864,9 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
             </tbody>
           </table>
         </div>
-        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {(data || []).length} pesanan</div>
+        <div className="px-3 py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {allOrders.length} pesanan</div>
       </div>
+      )}
       <Modal isOpen={!!selected} title={`Pesanan ${selected?.orderNumber || selected?.id?.slice(0,8) || ''}`} onClose={() => setSelected(null)} size="lg"
         footer={
           <>
@@ -812,7 +899,7 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
                   <div className="grid grid-cols-2 gap-3 mb-3">
                     <div>
                       <p className="text-xs text-muted-foreground">Status Pembayaran</p>
-                      <StatusBadge status={payment.status} />
+                      <PaymentStatusBadge status={payment.status} />
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Metode</p>

@@ -76,7 +76,6 @@ export default function CheckoutPage() {
       clearCart();
 
       setTimeout(() => {
-        setIsProcessing(false);
         router.push(`/orders/${orderId}`);
       }, 1500);
     } catch {
@@ -85,7 +84,7 @@ export default function CheckoutPage() {
     }
   };
 
-  if (items.length === 0) {
+  if (items.length === 0 && !isProcessing) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
