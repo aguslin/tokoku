@@ -3,7 +3,7 @@ const ApiError = require('../utils/ApiError');
 const { ORDER_STATUS } = require('../constants');
 const { getPagination, getPaginationMeta } = require('../helpers/pagination');
 
-const { Order, OrderItem, Cart, CartItem, Product, ProductVariant, Address, Courier, Voucher, VoucherUsage, Review } = db;
+const { Order, OrderItem, Cart, CartItem, Product, ProductVariant, Address, Courier, Voucher, VoucherUsage, Review, Payment, PaymentMethod } = db;
 
 const generateOrderNumber = () => {
   const date = new Date();
@@ -314,6 +314,12 @@ const getAllOrders = async (query) => {
     include: [
       ...orderIncludes,
       { model: db.User, as: 'User', attributes: ['id', 'name', 'email'] },
+      {
+        model: db.Payment,
+        as: 'Payments',
+        separate: true,
+        include: [{ model: db.PaymentMethod, as: 'PaymentMethod' }],
+      },
     ],
     offset,
     limit,

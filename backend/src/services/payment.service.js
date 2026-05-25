@@ -92,8 +92,56 @@ const getPaymentByOrder = async (orderId) => {
   return payment;
 };
 
+const submitPaymentProof = async (orderId, userId, proofUrl) => {
+  const order = await Order.findByPk(orderId);
+  if (!order) {
+    throw ApiError.notFound('Order not found');
+  }
+
+  if (order.userId !== userId) {
+    throw ApiError.forbidden('Not authorized to submit payment for this order');
+  }
+
+  if (order.status === ORDER_STATUS.CANCELLED) {
+    throw ApiError.badRequest('Cannot submit payment for cancelled order');
+  }
+
+  let payment = await Payment.findOne({
+    where: { orderId, status: PAYMENT_STATUS.PENDING },
+    order: [['createdAt', 'DESC']],
+  });
+
+  if (!payment) {
+    payment = await Payment.create({
+      orderId,
+      amount: order.total,
+      status: PAYMENT_STATUS.PENDING,
+      metadata: { proofUrl },
+    });
+  }
+
+  const metadata = payment.metadata || {};
+  metadata.proofUrl = proofUrl;
+  metadata.submittedAt = new Date().toISOString();
+
+  await payment.update({
+    status: PAYMENT_STATUS.PAID,
+    paidAt: new Date(),
+    transactionId: `MANUAL-${Date.now()}`,
+    metadata,
+  });
+
+  await Order.update(
+    { status: ORDER_STATUS.CONFIRMED, paidAt: new Date() },
+    { where: { id: orderId } },
+  );
+
+  return payment;
+};
+
 module.exports = {
   createPayment,
   processPayment,
   getPaymentByOrder,
+  submitPaymentProof,
 };

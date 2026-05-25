@@ -10,13 +10,15 @@ import { useOrderStore } from '@/lib/store';
 
 const STATUS_MAP: Record<string, { label: string; variant: 'success' | 'info' | 'warning' | 'destructive' | 'secondary' }> = {
   pending: { label: 'Menunggu Pembayaran', variant: 'warning' },
-  paid: { label: 'Dibayar', variant: 'info' },
+  paid: { label: 'Menunggu Konfirmasi', variant: 'info' },
+  confirmed: { label: 'Dikonfirmasi', variant: 'info' },
   processing: { label: 'Diproses', variant: 'info' },
   packed: { label: 'Dikemas', variant: 'info' },
   shipped: { label: 'Dikirim', variant: 'info' },
   delivered: { label: 'Terkirim', variant: 'success' },
   completed: { label: 'Selesai', variant: 'success' },
   cancelled: { label: 'Dibatalkan', variant: 'destructive' },
+  refunded: { label: 'Dikembalikan', variant: 'destructive' },
 };
 
 export default function OrdersPage() {
@@ -43,7 +45,7 @@ export default function OrdersPage() {
                 <Card key={order.id} className="p-4">
                   <div className="flex items-center justify-between gap-4 flex-wrap">
                     <div className="flex-1">
-                      <h3 className="font-bold text-foreground">{order.id}</h3>
+                      <h3 className="font-bold text-foreground">#{order.id.slice(0, 8).toUpperCase()}</h3>
                       <p className="text-sm text-muted-foreground mb-2">
                         {new Date(order.createdAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' })}
                       </p>

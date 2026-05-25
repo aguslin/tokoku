@@ -3,22 +3,24 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle, Truck, MapPin, Banknote } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Truck, MapPin, Banknote, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { formatCurrency } from '@/lib/utils/currency';
 import { MOCK_ADDRESSES, MOCK_COURIERS } from '@/lib/mock-data/addresses';
 import { useCartStore, useOrderStore } from '@/lib/store';
+import { paymentApi } from '@/lib/api/payment';
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items, total: cartTotal } = useCartStore();
-  const { addOrder } = useOrderStore();
+  const { items, total: cartTotal, clearCart } = useCartStore();
+  const { addOrder, updateStatus: updateOrderStatus } = useOrderStore();
   const [step, setStep] = useState(1);
   const [selectedAddress, setSelectedAddress] = useState(MOCK_ADDRESSES[0].id);
   const [selectedCourier, setSelectedCourier] = useState(MOCK_COURIERS[0].id);
   const [selectedPayment, setSelectedPayment] = useState('bca-va');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentError, setPaymentError] = useState<string | null>(null);
 
   const subtotal = cartTotal;
   const courier = MOCK_COURIERS.find(c => c.id === selectedCourier) || MOCK_COURIERS[0];
@@ -35,36 +37,52 @@ export default function CheckoutPage() {
     { id: 'qris', name: 'QRIS', icon: '✨' },
   ];
 
-  const handlePayment = () => {
+  const handlePayment = async () => {
     if (items.length === 0) return;
     setIsProcessing(true);
+    setPaymentError(null);
 
-    const address = MOCK_ADDRESSES.find(a => a.id === selectedAddress) || MOCK_ADDRESSES[0];
-    const addrStr = `${address.street}, ${address.city}, ${address.province} ${address.zipCode}`;
+    try {
+      const address = MOCK_ADDRESSES.find(a => a.id === selectedAddress) || MOCK_ADDRESSES[0];
+      const addrStr = `${address.street}, ${address.city}, ${address.province} ${address.zipCode}`;
 
-    const orderId = addOrder({
-      items: items.map(i => ({
-        productId: i.productId,
-        productName: i.productName,
-        productImage: i.productImage,
-        price: i.price,
-        quantity: i.quantity,
-      })),
-      subtotal,
-      shipping,
-      tax: 0,
-      total,
-      status: 'pending',
-      paymentMethod: paymentMethods.find(p => p.id === selectedPayment)?.name || 'BCA Virtual Account',
-      courier: courier.name,
-      address: addrStr,
-      estimatedDelivery: new Date(Date.now() + 3 * 86400000).toISOString(),
-    });
+      const orderData = {
+        items: items.map(i => ({
+          productId: i.productId,
+          productName: i.productName,
+          productImage: i.productImage,
+          price: i.price,
+          quantity: i.quantity,
+        })),
+        subtotal,
+        shipping,
+        tax: 0,
+        total,
+        status: 'pending' as const,
+        paymentMethod: paymentMethods.find(p => p.id === selectedPayment)?.name || 'BCA Virtual Account',
+        courier: courier.name,
+        address: addrStr,
+        estimatedDelivery: new Date(Date.now() + 3 * 86400000).toISOString(),
+      };
 
-    setTimeout(() => {
+      const orderId = addOrder(orderData);
+
+      const paymentMethodId = selectedPayment;
+      const res = await paymentApi.createPayment(orderId, paymentMethodId);
+      if (res.success) {
+        updateOrderStatus(orderId, 'pending');
+      }
+
+      clearCart();
+
+      setTimeout(() => {
+        setIsProcessing(false);
+        router.push(`/orders/${orderId}`);
+      }, 1500);
+    } catch {
+      setPaymentError('Gagal memproses pembayaran. Silakan coba lagi.');
       setIsProcessing(false);
-      router.push(`/orders/${orderId}`);
-    }, 1500);
+    }
   };
 
   if (items.length === 0) {

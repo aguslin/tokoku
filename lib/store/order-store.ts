@@ -16,8 +16,10 @@ export interface Order {
   shipping: number;
   tax: number;
   total: number;
-  status: 'pending' | 'paid' | 'processing' | 'packed' | 'shipped' | 'delivered' | 'completed' | 'cancelled';
+  status: 'pending' | 'paid' | 'confirmed' | 'processing' | 'packed' | 'shipped' | 'delivered' | 'completed' | 'cancelled' | 'refunded';
   paymentMethod: string;
+  paymentProof?: string;
+  paymentProofUploadedAt?: string;
   courier: string;
   address: string;
   createdAt: string;
@@ -29,6 +31,7 @@ export interface OrderState {
   addOrder: (order: Omit<Order, 'id' | 'createdAt'>) => string;
   getOrder: (id: string) => Order | undefined;
   updateStatus: (id: string, status: Order['status']) => void;
+  submitPaymentProof: (id: string, proofUrl: string) => void;
 }
 
 export const useOrderStore = create<OrderState>()(
@@ -36,7 +39,10 @@ export const useOrderStore = create<OrderState>()(
     (set, get) => ({
       orders: [],
       addOrder: (order) => {
-        const id = `ORD-${Date.now().toString().slice(-6)}`;
+        const id = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+          const r = (Math.random() * 16) | 0;
+          return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+        });
         set((state) => ({
           orders: [
             {
@@ -56,6 +62,15 @@ export const useOrderStore = create<OrderState>()(
         set((state) => ({
           orders: state.orders.map((o) =>
             o.id === id ? { ...o, status } : o
+          ),
+        }));
+      },
+      submitPaymentProof: (id, proofUrl) => {
+        set((state) => ({
+          orders: state.orders.map((o) =>
+            o.id === id
+              ? { ...o, paymentProof: proofUrl, paymentProofUploadedAt: new Date().toISOString(), status: 'paid' }
+              : o
           ),
         }));
       },

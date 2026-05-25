@@ -4,13 +4,14 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Users, ShoppingBag, Package, FolderTree, Ticket,
-  Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown, Loader2
+  Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown, Loader2, Banknote, Image as ImageIcon
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { Modal } from '@/components/shared/modal';
 import { adminApi } from '@/lib/api/admin';
+import { useOrderStore } from '@/lib/store';
 
 type Tab = 'users' | 'categories' | 'products' | 'orders' | 'vouchers';
 
@@ -22,17 +23,31 @@ const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: 'vouchers', label: 'Voucher', icon: Ticket },
 ];
 
+const STATUS_LABELS: Record<string, string> = {
+  pending: 'Menunggu Pembayaran',
+  paid: 'Menunggu Konfirmasi',
+  confirmed: 'Dikonfirmasi',
+  processing: 'Diproses',
+  shipped: 'Dikirim',
+  delivered: 'Terkirim',
+  completed: 'Selesai',
+  cancelled: 'Dibatalkan',
+  refunded: 'Dikembalikan',
+};
+
 const STATUS_STYLES: Record<string, string> = {
   pending: 'bg-warning/10 text-warning',
   paid: 'bg-blue-100 text-blue-600',
-  processing: 'bg-blue-100 text-blue-600',
+  confirmed: 'bg-blue-100 text-blue-600',
+  processing: 'bg-info/10 text-info',
   shipped: 'bg-primary/10 text-primary',
   delivered: 'bg-success/10 text-success',
   completed: 'bg-success/10 text-success',
   cancelled: 'bg-destructive/10 text-destructive',
+  refunded: 'bg-destructive/10 text-destructive',
 };
 
-const ORDER_STATUSES = ['pending', 'processing', 'shipped', 'delivered', 'completed', 'cancelled'];
+const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
 
 function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?: string }>) {
   const [data, setData] = useState<T | null>(null);
@@ -58,7 +73,8 @@ function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?
 interface UserData { id: string; name: string; email: string; phone: string; isActive: boolean; createdAt: string; }
 interface Category { id: string; name: string; slug: string; description: string; isActive: boolean; sortOrder: number; }
 interface Product { id: string; name: string; slug: string; price: number; stock: number; sku: string; isActive: boolean; isFeatured: boolean; categoryId: string; }
-interface Order { id: string; orderNumber: string; status: string; total: number; subtotal: number; shippingCost: number; notes: string; createdAt: string; userId: string; }
+interface OrderPayment { id: string; status: string; paymentMethodId: string; amount: number; paidAt: string | null; transactionId: string | null; metadata: { proofUrl?: string } | null; PaymentMethod?: { id: string; name: string; code: string } | null; }
+interface Order { id: string; orderNumber: string; status: string; total: number; subtotal: number; shippingCost: number; notes: string; createdAt: string; userId: string; paidAt: string | null; Payments?: OrderPayment[]; }
 interface Voucher { id: string; code: string; name: string; type: string; value: number; minOrder: number; maxDiscount: number | null; usageLimit: number | null; usedCount: number; startsAt: string; endsAt: string; isActive: boolean; }
 
 function DashboardContent() {
@@ -149,7 +165,7 @@ function ErrorState({ message, onRetry }: { message: string; onRetry: () => void
 function StatusBadge({ status }: { status: string }) {
   return (
     <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_STYLES[status] || 'bg-muted text-muted-foreground'}`}>
-      {status.charAt(0).toUpperCase() + status.slice(1)}
+      {STATUS_LABELS[status] || status.charAt(0).toUpperCase() + status.slice(1)}
     </span>
   );
 }
@@ -665,19 +681,54 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
    );
  }
 
+function getLatestPayment(order: Order): OrderPayment | undefined {
+  return order.Payments?.[0];
+}
+
 function OrdersSection({ data, loading, error, refetch, search, setSearch }: any) {
   const [selected, setSelected] = useState<Order | null>(null);
   const [newStatus, setNewStatus] = useState('');
   const [updating, setUpdating] = useState(false);
+  const localOrders = useOrderStore((s) => s.orders);
+  const updateLocalOrderStatus = useOrderStore((s) => s.updateStatus);
 
-  const filtered = (data || []).filter((o: Order) =>
+  const allOrders: Order[] = [
+    ...(data || []),
+    ...localOrders.filter((lo) => !(data || []).some((o: Order) => o.id === lo.id)).map((lo) => ({
+      id: lo.id,
+      orderNumber: `LOCAL-${lo.id.slice(0, 8)}`,
+      status: lo.status,
+      total: lo.total,
+      subtotal: lo.subtotal,
+      shippingCost: lo.shipping,
+      notes: '',
+      createdAt: lo.createdAt,
+      userId: '',
+      paidAt: lo.paymentProofUploadedAt || null,
+      Payments: lo.paymentProof ? [{
+        id: '',
+        status: lo.paymentProof ? 'paid' : 'pending',
+        paymentMethodId: '',
+        amount: lo.total,
+        paidAt: lo.paymentProofUploadedAt || null,
+        transactionId: null,
+        metadata: lo.paymentProof ? { proofUrl: lo.paymentProof } : null,
+        PaymentMethod: lo.paymentMethod ? { id: '', name: lo.paymentMethod, code: '' } : null,
+      }] : [],
+    })),
+  ];
+
+  const filtered = allOrders.filter((o: Order) =>
     (o.orderNumber || o.id)?.toLowerCase().includes(search.toLowerCase())
   );
 
   const updateStatus = async () => {
     if (!selected || !newStatus || newStatus === selected.status) return;
     setUpdating(true);
-    await adminApi.put(`/orders/${selected.id}/status`, { status: newStatus });
+    const res = await adminApi.put(`/orders/${selected.id}/status`, { status: newStatus });
+    if (!res.success) {
+      updateLocalOrderStatus(selected.id, newStatus as Order['status']);
+    }
     setUpdating(false); setSelected(null); refetch();
   };
 
@@ -695,24 +746,35 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
               <tr className="border-b border-border bg-sky-50">
                 <th className="px-3 py-2.5 text-left font-semibold">Pesanan</th>
                 <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Status</th>
+                <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Pembayaran</th>
                 <th className="px-3 py-2.5 text-left font-semibold hidden sm:table-cell">Total</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Aksi</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((o: Order) => (
-                <tr key={o.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
-                  <td className="px-3 py-2.5">
-                    <p className="font-medium text-foreground">{o.orderNumber || o.id.slice(0, 8)}</p>
-                    <p className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleDateString('id-ID')}</p>
-                  </td>
-                  <td className="px-3 py-2.5 hidden sm:table-cell"><StatusBadge status={o.status} /></td>
-                  <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {(o.total || o.subtotal || 0).toLocaleString()}</td>
-                  <td className="px-3 py-2.5 text-right">
-                    <button onClick={() => { setSelected(o); setNewStatus(o.status); }} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"><Eye className="w-3.5 h-3.5" /></button>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((o: Order) => {
+                const payment = getLatestPayment(o);
+                return (
+                  <tr key={o.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
+                    <td className="px-3 py-2.5">
+                      <p className="font-medium text-foreground">{o.orderNumber || o.id.slice(0, 8)}</p>
+                      <p className="text-xs text-muted-foreground">{new Date(o.createdAt).toLocaleDateString('id-ID')}</p>
+                    </td>
+                    <td className="px-3 py-2.5 hidden sm:table-cell"><StatusBadge status={o.status} /></td>
+                    <td className="px-3 py-2.5 hidden sm:table-cell">
+                      {payment ? (
+                        <StatusBadge status={payment.status} />
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {(o.total || o.subtotal || 0).toLocaleString()}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <button onClick={() => { setSelected(o); setNewStatus(o.status); }} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"><Eye className="w-3.5 h-3.5" /></button>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -737,15 +799,63 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
             </div>
             <div><p className="text-xs text-muted-foreground">Total</p><p className="text-lg font-bold text-primary">Rp {(selected.total || selected.subtotal || 0).toLocaleString()}</p></div>
             {selected.notes && <div><p className="text-xs text-muted-foreground">Catatan</p><p className="text-sm">{selected.notes}</p></div>}
-            <div>
-              <p className="text-xs text-muted-foreground mb-2">Status</p>
+
+            {(() => {
+              const payment = getLatestPayment(selected);
+              if (!payment) return null;
+              return (
+                <div className="border-t border-border pt-4">
+                  <h4 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Banknote className="w-4 h-4" />
+                    Informasi Pembayaran
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3 mb-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Status Pembayaran</p>
+                      <StatusBadge status={payment.status} />
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Metode</p>
+                      <p className="text-sm font-medium">{payment.PaymentMethod?.name || '—'}</p>
+                    </div>
+                  </div>
+                  {payment.transactionId && (
+                    <div className="mb-2">
+                      <p className="text-xs text-muted-foreground">ID Transaksi</p>
+                      <p className="text-sm font-mono">{payment.transactionId}</p>
+                    </div>
+                  )}
+                  {payment.paidAt && (
+                    <div className="mb-2">
+                      <p className="text-xs text-muted-foreground">Dibayar Pada</p>
+                      <p className="text-sm">{new Date(payment.paidAt).toLocaleString('id-ID')}</p>
+                    </div>
+                  )}
+                  {payment.metadata?.proofUrl && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-2">Bukti Pembayaran</p>
+                      <div className="relative w-full h-48 rounded-lg overflow-hidden bg-muted border border-border">
+                        <img
+                          src={payment.metadata.proofUrl}
+                          alt="Bukti pembayaran"
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <div className="border-t border-border pt-4">
+              <p className="text-xs text-muted-foreground mb-2">Status Pesanan</p>
               <div className="flex flex-wrap gap-1.5">
                 {ORDER_STATUSES.map(s => (
                   <button key={s} onClick={() => setNewStatus(s)}
                     className={`px-2.5 py-1 text-xs font-medium rounded-full border transition-colors ${
                       newStatus === s ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/50'
                     }`}>
-                    {s.charAt(0).toUpperCase() + s.slice(1)}
+                    {STATUS_LABELS[s] || s.charAt(0).toUpperCase() + s.slice(1)}
                   </button>
                 ))}
               </div>
