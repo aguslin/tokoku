@@ -278,3 +278,37 @@ pending → submitted → paid → (none)
 - TypeScript build errors are IGNORED: `next.config.mjs` has `typescript: { ignoreBuildErrors: true }`
 - `next.config.mjs` has `output: 'standalone'` for Docker deployment
 - Order confirm-receipt frontend reads auth token from `localStorage('auth-storage')` to match existing payment API pattern
+
+---
+
+## Verification Status (2026-05-25) ✅ All checked successfully
+
+### Stock & Sold Flow
+- [x] Admin sets "Dikirim" → stock decremented (Product.decrement via backend or adminApi fallback)
+- [x] Admin sets "Dikirim" → sold incremented (same PUT for local orders, backend confirmReceipt for DB orders)
+- [x] User clicks "Konfirmasi Penerimaan" (when status = shipped) → order becomes "completed"
+- [x] No double decrement: UUID validator prevents non-UUID orders from reaching backend service
+
+### req.user.id → req.user.userId Fix
+- [x] `createOrder`, `getUserOrders`, `getOrderById`, `cancelOrder`, `confirmReceipt` all use `req.user.userId`
+- [x] JWT payload `{ userId, role }` matched correctly
+
+### Backend Logging
+- [x] `[STOCK DECREMENT]` — logs product ID, name, before/after stock on shipped
+- [x] `[SOLD INCREMENT]` — logs product ID, name, before/after sold on confirm receipt
+- [x] `[PRODUCT UPDATE]` — logs when stock/sold is directly set via admin dashboard
+
+### Admin Dashboard
+- [x] Products tab refreshes after status change (refetchProducts prop)
+- [x] Status dropdown: no more "Terkirim" — admin only sets "Dikirim"
+- [x] Local orders merged with backend orders for unified view
+- [x] Payment proof / status display for local orders
+
+### Route Validation
+- [x] `PUT /:id/status` uses `orderValidator.updateOrderStatus` — 422 for invalid UUIDs (was 500)
+
+### Removed Status
+- [x] "Terkirim" (delivered) removed from flow
+- [x] Backend: shipped → completed direct transition
+- [x] Backend: confirmReceipt checks for shipped status (was delivered)
+- [x] User page: confirm button shows on `order.status === 'shipped'`
