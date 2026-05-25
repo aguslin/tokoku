@@ -791,9 +791,13 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch, refet
             const productRes = await adminApi.get<any>(`/products/${item.productId}`);
             if (productRes.success && productRes.data) {
               const currentStock = Number(productRes.data.stock ?? 0);
-              await adminApi.put(`/products/${item.productId}`, { stock: Math.max(0, currentStock - item.quantity) });
+              const currentSold = Number(productRes.data.sold ?? 0);
+              await adminApi.put(`/products/${item.productId}`, {
+                stock: Math.max(0, currentStock - item.quantity),
+                sold: currentSold + item.quantity,
+              });
             } else {
-              console.warn('[Admin] Failed to update product stock for', item.productId, productRes.error);
+              console.warn('[Admin] Failed to update product stock/sold for', item.productId, productRes.error);
             }
           }
         }

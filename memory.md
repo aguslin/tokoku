@@ -152,8 +152,9 @@ pending → submitted → paid → (none)
 ### Admin status update & stock/sold flow (`app/(admin)/dashboard/page.tsx:783-803`)
 - `updateStatus()` calls `PUT /api/v1/orders/:id/status`
 - If API fails (local-only order), falls back to `updateLocalOrderStatus()`
-- If new status = `shipped` AND API failed: tries to decrement stock via `PUT /api/v1/products/:id` for each order item
+- If new status = `shipped` AND API failed: decrements stock AND increments sold via `PUT /api/v1/products/:id` for each order item
 - Uses `adminApi` (reads `admin-token` from localStorage)
+- For local orders, sold increment happens at shipped time (user's confirm receipt just updates status)
 
 ### Backend order service (`backend/src/services/order.service.js`)
 - `updateStatus`: stock decrements on transition to `shipped` via `Product.decrement('stock', { by: item.quantity })`
@@ -193,6 +194,12 @@ pending → submitted → paid → (none)
 - **Admin dashboard**: Removed `delivered` from status list, labels, colors, priority, and local-order payment derivation.
 - **User order page**: Confirm receipt button now shows when `order.status === 'shipped'`.
 - **Files**: `backend/src/services/order.service.js`, `app/(admin)/dashboard/page.tsx`, `app/(user)/orders/[id]/page.tsx`
+
+### [FIXED 2026-05-25] Sold increment not working for local orders — admin dashboard now increments sold on shipped
+- For local orders, the user's browser often doesn't have `admin-token` (different port/localStorage)
+- Fix: when admin sets "Dikirim" (shipped) for a local order, the admin dashboard fallback does **both** stock decrement AND sold increment in one PUT call
+- User's confirm receipt button now only updates the local order status to completed
+- Files: `app/(admin)/dashboard/page.tsx`
 
 ### [FIXED 2026-05-25] Sold increment not working for local orders on confirm-receipt
 - **Symptom**: Stock decrement worked when admin set "Dikirim", but "terjual" never incremented for local (zustand-only) orders
