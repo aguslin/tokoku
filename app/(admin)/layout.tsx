@@ -111,28 +111,43 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-border p-3 flex items-center justify-between">
+      <div className="lg:hidden fixed top-0 left-0 right-0 z-50 bg-white border-b border-border px-3 py-2.5 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">
           <div className="w-7 h-7 bg-primary rounded-lg flex items-center justify-center">
             <ShoppingCart className="w-4 h-4 text-white" />
           </div>
-          <span className="font-bold text-foreground">Shop Admin</span>
+          <span className="font-bold text-sm text-foreground">Shop Admin</span>
         </Link>
-        <div className="flex items-center gap-2">
-          {NAV_ITEMS.slice(0, 4).map(item => {
-            const Icon = item.icon;
-            const isActive = pathname === item.href;
-            return (
-              <Link key={item.href} href={item.href}
-                className={`p-1.5 rounded-lg transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground'}`}>
-                <Icon className="w-4 h-4" />
-              </Link>
-            );
-          })}
+        <div className="flex items-center gap-1">
+          <button onClick={() => setShowTokenInput(!showTokenInput)}
+            className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors">
+            <Key className="w-4 h-4" />
+          </button>
+          <Link href="/"
+            className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
         </div>
       </div>
 
-      <div className="flex-1 lg:pt-0 pt-14">
+      {/* Mobile bottom tab navigation */}
+      <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-white border-t border-border flex justify-around items-center px-1 py-1">
+        {NAV_ITEMS.map(item => {
+          const Icon = item.icon;
+          const isActive = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href));
+          return (
+            <Link key={item.href} href={item.href}
+              className={`flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-lg transition-colors min-w-0 flex-1 ${
+                isActive ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:text-primary'
+              }`}>
+              <Icon className="w-5 h-5" />
+              <span className="text-[10px] leading-tight whitespace-nowrap">{item.label}</span>
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="flex-1 lg:pt-0 pt-[49px] pb-[65px]">
         {children}
       </div>
       <Toaster richColors closeButton position="top-right" />

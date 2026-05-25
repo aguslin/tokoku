@@ -6,7 +6,7 @@ const productValidator = require('../validators/product.validator');
 
 router.get('/', productController.getAll);
 router.get('/featured', productController.getFeatured);
-router.get('/:slug', productController.getBySlug);
+router.get('/:slugOrId', productController.getBySlugOrId);
 router.post('/', authenticate, authorize('admin', 'seller'), productValidator.createProduct, productController.create);
 router.put('/:id', authenticate, authorize('admin', 'seller'), productValidator.updateProduct, productController.update);
 router.delete('/:id', authenticate, authorize('admin', 'seller'), productController.remove);

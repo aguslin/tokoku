@@ -17,6 +17,34 @@ const getBySlug = catchAsync(async (req, res) => {
   ApiResponse.success(res, data, 'Product retrieved successfully');
 });
 
+const getBySlugOrId = catchAsync(async (req, res) => {
+  const { slugOrId } = req.params;
+  let product = null;
+  
+  // Check if it looks like a UUID (contains hyphens and is 36 chars)
+  const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slugOrId);
+  
+  if (isUUID) {
+    // Try ID first if it's a UUID
+    try {
+      product = await productService.getById(slugOrId);
+    } catch (err) {
+      // Fallback to slug
+      product = await productService.getBySlug(slugOrId);
+    }
+  } else {
+    // Try slug first if it's not a UUID
+    try {
+      product = await productService.getBySlug(slugOrId);
+    } catch (err) {
+      // Fallback to ID
+      product = await productService.getById(slugOrId);
+    }
+  }
+  
+  ApiResponse.success(res, product, 'Product retrieved successfully');
+});
+
 const create = catchAsync(async (req, res) => {
   const data = await productService.create(req.body, req.user.userId);
   ApiResponse.created(res, data, 'Product created successfully');
@@ -36,6 +64,7 @@ module.exports = {
   getAll,
   getFeatured,
   getBySlug,
+  getBySlugOrId,
   create,
   update,
   remove,

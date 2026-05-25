@@ -1,22 +1,23 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingCart, Heart, ArrowLeft, Check, Truck, Shield, Package } from 'lucide-react';
+import { ShoppingCart, Heart, ArrowLeft, Check, Truck, Shield, Package, Loader2 } from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { Badge } from '@/components/shared/badge';
 import { RatingStars } from '@/components/shared/rating-stars';
 import { formatCurrency } from '@/lib/utils/currency';
-import { MOCK_PRODUCTS } from '@/lib/mock-data/products';
 import { useCartStore, useWishlistStore, useAuthStore } from '@/lib/store';
 
 export default function ProductDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const product = MOCK_PRODUCTS.find((p) => p.id === params.id);
+  const [product, setProduct] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const { addItem } = useCartStore();
   const { addItem: addWishlist, removeItem: removeWishlist, isInWishlist } = useWishlistStore();
   const { isAuthenticated } = useAuthStore();
@@ -24,11 +25,56 @@ export default function ProductDetailPage() {
   const [selectedImage, setSelectedImage] = useState(0);
   const [addedToCart, setAddedToCart] = useState(false);
 
-  if (!product) {
+  useEffect(() => {
+    const fetchProduct = async () => {
+      try {
+        if (!params.id) {
+          setError('ID produk tidak ditemukan');
+          setLoading(false);
+          return;
+        }
+        
+        setLoading(true);
+        setError('');
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+        
+        const productId = params.id;
+        console.log('Fetching product with ID:', productId);
+        
+        const res = await fetch(`${apiUrl}/products/${productId}`);
+        const json = await res.json();
+        
+        console.log('API Response:', json);
+        
+        if (json.success && json.data) {
+          setProduct(json.data);
+        } else {
+          setError('Produk tidak ditemukan');
+        }
+      } catch (err) {
+        console.error('Failed to fetch product', err);
+        setError('Gagal memuat produk');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    fetchProduct();
+  }, [params.id]);
+
+  if (loading) {
+    return (
+      <main className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </main>
+    );
+  }
+
+  if (!product || error) {
     return (
       <main className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-muted-foreground mb-4">Produk tidak ditemukan</p>
+          <p className="text-muted-foreground mb-4">{error || 'Produk tidak ditemukan'}</p>
           <Link href="/marketplace">
             <Button>Kembali ke Marketplace</Button>
           </Link>
@@ -42,15 +88,19 @@ export default function ProductDetailPage() {
       router.push('/login');
       return;
     }
+    const imageUrl = product.ProductImages?.length > 0 
+      ? (product.ProductImages[0].url.startsWith('http') ? product.ProductImages[0].url : product.ProductImages[0].url)
+      : '/placeholder.svg';
+    
     addItem({
       id: `${product.id}-${Date.now()}`,
       productId: product.id,
       productName: product.name,
-      productImage: product.image,
-      price: product.price,
+      productImage: imageUrl,
+      price: Number(product.price),
       quantity,
-      sellerName: product.seller.name,
-      sellerVerified: product.seller.verified,
+      sellerName: product.seller?.name || 'Toko',
+      sellerVerified: product.seller?.verified || false,
     });
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
@@ -61,15 +111,19 @@ export default function ProductDetailPage() {
       router.push('/login');
       return;
     }
+    const imageUrl = product.ProductImages?.length > 0 
+      ? (product.ProductImages[0].url.startsWith('http') ? product.ProductImages[0].url : product.ProductImages[0].url)
+      : '/placeholder.svg';
+    
     addItem({
       id: `${product.id}-${Date.now()}`,
       productId: product.id,
       productName: product.name,
-      productImage: product.image,
-      price: product.price,
+      productImage: imageUrl,
+      price: Number(product.price),
       quantity,
-      sellerName: product.seller.name,
-      sellerVerified: product.seller.verified,
+      sellerName: product.seller?.name || 'Toko',
+      sellerVerified: product.seller?.verified || false,
     });
     router.push('/checkout');
   };
@@ -79,19 +133,29 @@ export default function ProductDetailPage() {
       router.push('/login');
       return;
     }
+    const imageUrl = product.ProductImages?.length > 0 
+      ? (product.ProductImages[0].url.startsWith('http') ? product.ProductImages[0].url : product.ProductImages[0].url)
+      : '/placeholder.svg';
+    
     if (isInWishlist(product.id)) {
       removeWishlist(product.id);
     } else {
       addWishlist({
         productId: product.id,
         productName: product.name,
-        productImage: product.image,
-        price: product.price,
+        productImage: imageUrl,
+        price: Number(product.price),
       });
     }
   };
 
-  const images = product.images.length > 0 ? product.images : [product.image];
+  const images = product.ProductImages?.length > 0 
+    ? product.ProductImages.map((img: any) => img.url)
+    : ['/placeholder.svg'];
+
+  const mainImage = images[selectedImage];
+  const primaryImage = product.ProductImages?.find((img: any) => img.isPrimary);
+  const displayImage = primaryImage?.url || images[0];
 
   return (
     <main className="min-h-screen bg-background">
@@ -113,28 +177,20 @@ export default function ProductDetailPage() {
           <div className="space-y-4">
             <div className="relative h-80 lg:h-96 bg-muted rounded-xl overflow-hidden">
               <Image
-                src={images[selectedImage]}
+                src={displayImage}
                 alt={product.name}
                 fill
                 className="object-cover"
                 priority
               />
-              {product.badge && (
-                <Badge
-                  variant={product.badge === 'flash-sale' ? 'destructive' : product.badge === 'trending' ? 'warning' : 'info'}
-                  className="absolute top-4 right-4"
-                >
-                  {product.badge === 'flash-sale' ? 'Flash Sale' : product.badge === 'trending' ? 'Trending' : 'Baru'}
-                </Badge>
-              )}
             </div>
             {images.length > 1 && (
-              <div className="flex gap-2">
-                {images.map((img, i) => (
+              <div className="flex gap-2 overflow-x-auto">
+                {images.map((img: string, i: number) => (
                   <button
                     key={i}
                     onClick={() => setSelectedImage(i)}
-                    className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors ${
+                    className={`relative w-16 h-16 rounded-lg overflow-hidden border-2 transition-colors flex-shrink-0 ${
                       selectedImage === i ? 'border-primary' : 'border-border'
                     }`}
                   >
@@ -148,31 +204,31 @@ export default function ProductDetailPage() {
           <div className="space-y-6">
             <div>
               <p className="text-sm text-muted-foreground mb-1">
-                <Link href="/marketplace" className="hover:text-primary">{product.category}</Link>
+                <Link href="/marketplace" className="hover:text-primary">{product.Category?.name || 'Kategori'}</Link>
                 <span className="mx-2">/</span>
-                {product.seller.name}
-                {product.seller.verified && (
+                {product.seller?.name || 'Toko'}
+                {product.seller?.verified && (
                   <Check className="w-3 h-3 inline text-primary ml-1" />
                 )}
               </p>
               <h1 className="text-2xl font-bold text-foreground">{product.name}</h1>
               <div className="flex items-center gap-3 mt-2">
-                <RatingStars rating={product.rating} size="sm" />
-                <span className="text-sm text-muted-foreground">({product.reviewCount} ulasan)</span>
-                <span className="text-sm text-muted-foreground">| {product.sold} terjual</span>
+                <span className="text-sm text-muted-foreground">Stok: {product.stock}</span>
               </div>
             </div>
 
             <Card className="bg-primary/5 border-primary/20">
               <div className="flex items-baseline gap-3">
-                <span className="text-3xl font-bold text-primary">{formatCurrency(product.price)}</span>
-                {product.originalPrice && (
+                <span className="text-3xl font-bold text-primary">{formatCurrency(Number(product.price))}</span>
+                {product.comparePrice && Number(product.comparePrice) > 0 && (
                   <>
                     <span className="text-lg text-muted-foreground line-through">
-                      {formatCurrency(product.originalPrice)}
+                      {formatCurrency(Number(product.comparePrice))}
                     </span>
-                    {product.discount && (
-                      <Badge variant="destructive">-{product.discount}%</Badge>
+                    {product.comparePrice && product.price && (
+                      <Badge variant="destructive">
+                        -{Math.round(((Number(product.comparePrice) - Number(product.price)) / Number(product.comparePrice)) * 100)}%
+                      </Badge>
                     )}
                   </>
                 )}
@@ -190,7 +246,7 @@ export default function ProductDetailPage() {
                 </button>
                 <span className="w-10 text-center font-semibold">{quantity}</span>
                 <button
-                  onClick={() => setQuantity(Math.min(product.stock, quantity + 1))}
+                  onClick={() => setQuantity(Math.min(Number(product.stock), quantity + 1))}
                   className="w-8 h-8 border border-border rounded flex items-center justify-center text-lg hover:bg-muted"
                 >
                   +
@@ -204,7 +260,7 @@ export default function ProductDetailPage() {
             <div className="flex items-center gap-4 text-sm text-muted-foreground py-3 border-y border-border">
               <div className="flex items-center gap-1">
                 <Truck className="w-4 h-4" />
-                Pengiriman {product.deliveryDays} hari
+                Pengiriman 2-3 hari
               </div>
               <div className="flex items-center gap-1">
                 <Shield className="w-4 h-4" />
@@ -216,20 +272,8 @@ export default function ProductDetailPage() {
               </div>
             </div>
 
-            <p className="text-sm text-foreground">{product.description}</p>
-
-            {product.specs && (
-              <div>
-                <h3 className="font-semibold text-foreground mb-2">Spesifikasi</h3>
-                <div className="space-y-1">
-                  {Object.entries(product.specs).map(([key, value]) => (
-                    <div key={key} className="flex text-sm">
-                      <span className="text-muted-foreground w-40">{key}</span>
-                      <span className="text-foreground">{value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
+            {product.description && (
+              <p className="text-sm text-foreground">{product.description}</p>
             )}
 
             <div className="flex gap-3">
