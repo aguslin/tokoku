@@ -47,7 +47,7 @@ async function request<T>(
       return { success: false, error };
     }
     let responseData = json.data;
-    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData)) {
+    if (responseData && typeof responseData === 'object' && !Array.isArray(responseData) && 'meta' in responseData) {
       const arrayProp = Object.values(responseData).find(v => Array.isArray(v));
       if (arrayProp) responseData = arrayProp;
     }

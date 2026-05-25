@@ -1,5 +1,6 @@
 const db = require('../models');
 const ApiError = require('../utils/ApiError');
+const logger = require('../config/logger');
 const { ORDER_STATUS } = require('../constants');
 const { getPagination, getPaginationMeta } = require('../helpers/pagination');
 
@@ -358,8 +359,12 @@ const updateStatus = async (orderId, status) => {
   }
   if (status === ORDER_STATUS.SHIPPED) {
     const items = await OrderItem.findAll({ where: { orderId } });
+    logger.info(`[ORDER STATUS] Updating order ${orderId} to SHIPPED. Items: ${JSON.stringify(items.map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity })))}`);
     for (const item of items) {
+      const before = await Product.findByPk(item.productId, { attributes: ['id', 'stock'] });
       await Product.decrement('stock', { by: item.quantity, where: { id: item.productId } });
+      const after = await Product.findByPk(item.productId, { attributes: ['id', 'stock'] });
+      logger.info(`[STOCK DECREMENT] Product ${item.productId} (${item.productName}): stock ${before?.stock} -> ${after?.stock} (decrement by ${item.quantity})`);
     }
   }
   if (status === ORDER_STATUS.DELIVERED) {
@@ -384,6 +389,7 @@ const confirmReceipt = async (orderId, userId) => {
   if (!order) {
     throw ApiError.notFound('Order not found');
   }
+  logger.info(`[CONFIRM RECEIPT] Order ${orderId} by user ${userId}. Order userId: ${order.userId}, status: ${order.status}`);
   if (order.userId !== userId) {
     throw ApiError.forbidden('You are not authorized to confirm this order');
   }
@@ -392,8 +398,12 @@ const confirmReceipt = async (orderId, userId) => {
   }
 
   const items = await OrderItem.findAll({ where: { orderId } });
+  logger.info(`[CONFIRM RECEIPT] Items: ${JSON.stringify(items.map(i => ({ productId: i.productId, productName: i.productName, quantity: i.quantity })))}`);
   for (const item of items) {
+    const before = await Product.findByPk(item.productId, { attributes: ['id', 'sold'] });
     await Product.increment('sold', { by: item.quantity, where: { id: item.productId } });
+    const after = await Product.findByPk(item.productId, { attributes: ['id', 'sold'] });
+    logger.info(`[SOLD INCREMENT] Product ${item.productId} (${item.productName}): sold ${before?.sold} -> ${after?.sold} (increment by ${item.quantity})`);
   }
 
   await order.update({ status: ORDER_STATUS.COMPLETED });
@@ -436,5 +446,6 @@ module.exports = {
   getUserOrders,
   getAllOrders,
   updateStatus,
+  confirmReceipt,
   cancelOrder,
 };

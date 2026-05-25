@@ -166,31 +166,84 @@ pending → submitted → paid → (none)
 - Run manually inside container because Umzug glob `src/migrations/*.js` resolved from CWD `/app` (not `/app/backend`)
 - **Fix applied**: `backend/server.js` now uses `__dirname + '/src/migrations/*.js'` for absolute path
 
+## Logging & Debugging
+
+### Backend logging (added 2026-05-25)
+- Logging added to `backend/src/services/order.service.js:updateStatus`:
+  - On `SHIPPED` transition: logs orderId, items (productId, productName, quantity), and before/after stock values
+- Logging added to `backend/src/services/product.service.js:update`:
+  - Logs product ID, name, old stock/sold value, and new value whenever stock or sold is directly set
+- **Log tag**: `[ORDER STATUS]`, `[STOCK DECREMENT]`, `[PRODUCT UPDATE]`
+- View logs: `docker logs marketplace-v2`
+
+### Backend Docker rebuild
+- The `app.js:64` validation error fix is now included in Docker build (no longer lost on restart)
+
+### Route validator fix
+- `backend/src/routes/order.routes.js:13`: Added `orderValidator.updateOrderStatus` middleware to validate UUID param before reaching controller
+- Previously, non-UUID order IDs caused PostgreSQL casting errors → 500 Internal Server Error
+- Now correctly returns 422 validation error for invalid UUIDs
+
 ## Current Issues / Bugs
 
-### [BUG] Admin orders page shows "Belum ada pesanan" — local orders not appearing
+### [FIXED 2026-05-25] Sold increment not working for local orders on "delivered" & "confirm-receipt"
+- **Symptom**: Stock decrement worked when admin set "Dikirim", but "terjual" never incremented for local (zustand-only) orders
+- **Root causes**:
+  1. `backend/src/services/order.service.js` — `confirmReceipt` function was defined but **not exported** from `module.exports` → backend crashed with 500 on confirm-receipt API call
+  2. `app/(admin)/dashboard/page.tsx` — Admin can only set status to `delivered` (not `completed`), but sold increment fallback only checked `newStatus === 'completed'` → never fired
+  3. `app/(user)/orders/[id]/page.tsx` — Fallback used `admin-token` exclusively; skipped silently if missing
+- **Fixes**:
+  1. Added `confirmReceipt` to `module.exports` in `order.service.js`
+  2. Admin fallback now also handles `delivered` status for sold increment (line 799)
+  3. User page fallback now falls back to user's auth token if admin token missing, plus console.warn for diagnostics
+- **Files**: `backend/src/services/order.service.js`, `app/(admin)/dashboard/page.tsx`, `app/(user)/orders/[id]/page.tsx`
+
+### [FIXED] Admin dashboard product stock not refreshing after order status update
+- **Symptom**: After admin changes order status to "Dikirim" (shipped), the Products tab still shows old stock values until full page refresh
+- **Root cause**: `OrdersSection.updateStatus()` only called `refetch()` (orders refetch) — products data was fetched once at mount and never refreshed
+- **Fix**: `app/(admin)/dashboard/page.tsx`:
+  1. Passed `refetchProducts={products.refetch}` from `DashboardContent` to `OrdersSection` (line 138)
+  2. `OrdersSection` now accepts `refetchProducts` prop (line 714)
+  3. After status changes to `shipped` or `completed`, calls `refetchProducts?.()` (line 811)
+- **Files**: `app/(admin)/dashboard/page.tsx`
+
+### [FIXED] Sold increment not working when user confirms receipt ("terjual" not updating)
+- **Symptom**: Stock decrement works when admin sets "Dikirim", but "terjual" (sold) doesn't increment when user clicks "Konfirmasi Penerimaan"
+- **Root cause**: `backend/src/controllers/order.controller.js` — The JWT generates payload `{ userId: user.id, role }`, so `req.user = { userId, role }`. But ALL controllers used **`req.user.id`** instead of `req.user.userId`. Since `req.user.id` is `undefined`, `confirmReceipt` throws 403 Forbidden (`order.userId !== undefined` is always true).
+- **Affected endpoints**:
+  - `POST /api/v1/orders/:id/confirm-receipt` — always returned 403 → frontend fallback runs, but requires `admin-token` in localStorage (regular user doesn't have it) → sold never incremented
+  - `POST /api/v1/orders` (`createOrder`) — same `req.user.id` bug
+  - `GET /api/v1/orders` (`getUserOrders`) — same bug
+  - `GET /api/v1/orders/:id` (`getOrderById`) — passed whole `req.user` object instead of userId string
+  - `POST /api/v1/orders/:id/cancel` (`cancelOrder`) — passed whole `req.user` object
+- **Fix**: Changed all `req.user.id` → `req.user.userId` and `req.user` → `req.user.userId` in `backend/src/controllers/order.controller.js`
+- **Files**: `backend/src/controllers/order.controller.js` (lines 6, 11, 21, 31, 36)
+
+### [FIXED] Stock goes from 100 to 0 when admin changes order to "Dikirim" (qty 1)
+- **Symptom**: Single order status update to "shipped" with quantity 1 changes product stock from 100 to 0
+- **Investigation from Docker logs** (`docker logs marketplace-v2`):
+  - Found `PUT /api/v1/orders/ORD-222308/status → 500` — frontend sent **order number** (`ORD-222308`) instead of UUID as order ID
+  - PostgreSQL can't cast non-UUID to uuid type → `SequelizeDatabaseError` → 500 Internal Server Error
+  - After 500 error, the **frontend fallback runs** (`!res.success` is true):
+    1. `updateLocalOrderStatus()` — tries to update zustand order (might not match if ID is wrong)
+    2. Stock decrement via `adminApi.put('/products/:id', { stock: newStock })` — correctly decrements
+  - BUT: When the API returns 500 **after** the backend already partially processed the request, the backend may have already decremented stock before the error occurred
+- **Probable causes**:
+  1. **Double decrement**: Backend partially processes (stock decremented), then error occurs → frontend fallback ALSO decrements stock
+  2. **Wrong order ID**: Admin selected an order whose `id` field is actually the `orderNumber` (happens if API response shape differs from expected `Order` interface)
+  3. **500 on backend order**: Backend decrements stock then fails → frontend fallback decrements again (double decrement)
+- **Mitigations applied**:
+  1. Added `orderValidator.updateOrderStatus` middleware to validate UUID format before processing
+  2. Added detailed backend logging to trace actual stock values
+  3. Fixed display refresh so admin can see real-time stock changes
+- **Still needs investigation**: If the 500 error's partial processing is confirmed, the `updateStatus` function in `order.service.js` should either:
+  - Roll back stock decrement on failure after decrement
+  - Or use a transaction
+
+### [KNOWN] Admin orders page shows "Belum ada pesanan" — local orders not appearing
 - **Symptom**: Admin page shows "Belum ada pesanan" even when local zustand store has orders (user orders page works fine)
 - **Probable cause**: localStorage `order-storage` key exists on port 3000 (user page) but not on port 3001 (admin Docker). localStorage is per-origin/port, so after switching to dev mode (port 3000), the orders stored under port 3000's localStorage aren't visible on Docker's port 3001. Need to check if orders appear on port 3001 admin page when created on port 3001.
 - **To debug**: On the relevant port's admin page, check `JSON.parse(localStorage.getItem('order-storage'))` in console
-
-### [BUG] Stock not decreasing when admin changes order to "Dikirim"
-- **Symptom**: Admin changes order status to "Dikirim" (shipped), but product stock doesn't decrease
-- **Causes**:
-  1. **Orders are local-only (not in backend DB)**: `PUT /api/v1/orders/:id/status` returns 404, falls back to `updateLocalOrderStatus` only
-  2. **Fallback stock decrement may fail**: Admin page tries `adminApi.get('/products/:id')` then `adminApi.put('/products/:id', { stock })` — may fail silently (network, auth, or product not found)
-  3. **No error surface**: All failures are silent (no toast, no console log visible to user)
-- **Affected code**: `app/(admin)/dashboard/page.tsx:783-803`
-
-### [BUG] Sold not increasing when user confirms receipt
-- **Symptom**: User clicks "Pesanan Diterima" on `orders/[id]` page, but product sold count doesn't increase
-- **Causes**:
-  1. **Orders are local-only**: `POST /api/v1/orders/:id/confirm-receipt` returns 404 (order not in backend), never reaches `confirmReceipt` service function
-  2. **No local fallback**: Unlike admin status update, there's no fallback code to increment sold locally
-- **Affected code**: `app/(user)/orders/[id]/page.tsx` — calls API but doesn't handle failure case
-
-### [BUG] Backend validation error fix not persistent
-- **Problem**: `backend/app.js:64` fix (changing validation error check from `err.name === 'ValidationError'` to `err.errors && Array.isArray(err.errors)`) was applied via `docker cp` — lost on container restart
-- **Fix**: Needs Docker rebuild to persist
 
 ## Upload Flow
 

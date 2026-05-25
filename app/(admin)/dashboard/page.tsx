@@ -135,7 +135,7 @@ function DashboardContent() {
         {tab === 'users' && <UsersSection {...users} search={search} setSearch={setSearch} />}
         {tab === 'categories' && <CategoriesSection {...categories} search={search} setSearch={setSearch} />}
         {tab === 'products' && <ProductsSection {...products} search={search} setSearch={setSearch} categories={categories.data || []} />}
-        {tab === 'orders' && <OrdersSection {...orders} search={search} setSearch={setSearch} />}
+        {tab === 'orders' && <OrdersSection {...orders} search={search} setSearch={setSearch} refetchProducts={products.refetch} />}
         {tab === 'vouchers' && <VouchersSection {...vouchers} search={search} setSearch={setSearch} />}
       </div>
     </main>
@@ -711,7 +711,7 @@ function getLatestPayment(order: Order): OrderPayment | undefined {
   return order.Payments?.[0];
 }
 
-function OrdersSection({ data, loading, error, refetch, search, setSearch }: any) {
+function OrdersSection({ data, loading, error, refetch, search, setSearch, refetchProducts }: any) {
   const [selected, setSelected] = useState<Order | null>(null);
   const [newStatus, setNewStatus] = useState('');
   const [updating, setUpdating] = useState(false);
@@ -786,20 +786,29 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch }: any
     const res = await adminApi.put(`/orders/${selected.id}/status`, { status: newStatus });
     if (!res.success) {
       updateLocalOrderStatus(selected.id, newStatus as Order['status']);
-      if (newStatus === 'shipped') {
+      if (['shipped', 'delivered', 'completed'].includes(newStatus)) {
         const orderItems = selected.OrderItems || (selected as any).items;
         if (orderItems) {
           for (const item of orderItems) {
             const productRes = await adminApi.get<any>(`/products/${item.productId}`);
             if (productRes.success && productRes.data) {
-              const currentStock = Number(productRes.data.stock ?? 0);
-              await adminApi.put(`/products/${item.productId}`, { stock: Math.max(0, currentStock - item.quantity) });
+              if (newStatus === 'shipped') {
+                const currentStock = Number(productRes.data.stock ?? 0);
+                await adminApi.put(`/products/${item.productId}`, { stock: Math.max(0, currentStock - item.quantity) });
+              }
+              if (newStatus === 'delivered' || newStatus === 'completed') {
+                const currentSold = Number(productRes.data.sold ?? 0);
+                await adminApi.put(`/products/${item.productId}`, { sold: currentSold + item.quantity });
+              }
+            } else {
+              console.warn('[Admin] Failed to update product stock/sold for', item.productId, productRes.error);
             }
           }
         }
       }
     }
     setUpdating(false); setSelected(null); refetch();
+    if (['shipped', 'delivered', 'completed'].includes(newStatus)) refetchProducts?.();
   };
 
   if (loading) return <TableSkeleton />;

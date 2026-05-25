@@ -10,7 +10,7 @@ router.post('/', orderValidator.createOrder, orderController.createOrder);
 router.get('/', orderController.getUserOrders);
 router.get('/all', authorize('admin'), orderController.getAllOrders);
 router.get('/:id', orderController.getOrderById);
-router.put('/:id/status', authorize('admin'), orderController.updateStatus);
+router.put('/:id/status', authorize('admin'), orderValidator.updateOrderStatus, orderController.updateStatus);
 router.post('/:id/cancel', orderController.cancelOrder);
 router.post('/:id/confirm-receipt', orderController.confirmReceipt);
 

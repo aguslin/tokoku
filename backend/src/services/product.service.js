@@ -1,5 +1,6 @@
 const db = require('../models');
 const ApiError = require('../utils/ApiError');
+const logger = require('../config/logger');
 const { getPagination, getPaginationMeta } = require('../helpers/pagination');
 
 const { Product, Category, ProductImage, ProductVariant, User, Review } = db;
@@ -173,6 +174,13 @@ const update = async (id, data) => {
     if (!category) {
       throw ApiError.notFound('Category not found');
     }
+  }
+
+  if (data.stock !== undefined) {
+    logger.info(`[PRODUCT UPDATE] Product ${id} (${product.name}): stock ${product.stock} -> ${data.stock} (direct set)`);
+  }
+  if (data.sold !== undefined) {
+    logger.info(`[PRODUCT UPDATE] Product ${id} (${product.name}): sold ${product.sold} -> ${data.sold} (direct set)`);
   }
 
   await product.update(data);
