@@ -91,18 +91,19 @@ const allOrders = [
 
 ### Order status flow (frontend)
 ```
-pending → paid → confirmed → processing → packed → shipped → delivered → completed
-                                                                    ↓
-                                                              cancelled / refunded
+pending → paid → confirmed → processing → packed → shipped → (user confirms) → completed
+                                                                          ↓
+                                                                    cancelled / refunded
 ```
 
 ### Order status flow (backend ORDER_STATUS constants in `backend/src/constants/index.js`)
 ```
-pending → paid → confirmed → processing → shipped → delivered → completed
-                                                                    ↓
-                                                              cancelled / refunded
+pending → paid → confirmed → processing → shipped → (user confirms) → completed
+                                                                  ↓
+                                                            cancelled / refunded
 ```
 Note: Backend has `packed` missing from ORDER_STATUS (but may still appear in frontend).
+Note: `delivered` status removed from flow — user confirms directly from `shipped` to `completed`.
 
 ### Payment status flow
 ```
@@ -186,7 +187,14 @@ pending → submitted → paid → (none)
 
 ## Current Issues / Bugs
 
-### [FIXED 2026-05-25] Sold increment not working for local orders on "delivered" & "confirm-receipt"
+### [2026-05-25] Removed "delivered" status from order flow — user confirms directly from "shipped"
+- **Change**: Admin no longer sets "Terkirim" (delivered). After admin sets "Dikirim" (shipped), user can immediately confirm receipt.
+- **Backend**: `updateStatus` transition `shipped → completed` (direct, no delivered step). `confirmReceipt` now checks for `shipped` status.
+- **Admin dashboard**: Removed `delivered` from status list, labels, colors, priority, and local-order payment derivation.
+- **User order page**: Confirm receipt button now shows when `order.status === 'shipped'`.
+- **Files**: `backend/src/services/order.service.js`, `app/(admin)/dashboard/page.tsx`, `app/(user)/orders/[id]/page.tsx`
+
+### [FIXED 2026-05-25] Sold increment not working for local orders on confirm-receipt
 - **Symptom**: Stock decrement worked when admin set "Dikirim", but "terjual" never incremented for local (zustand-only) orders
 - **Root causes**:
   1. `backend/src/services/order.service.js` — `confirmReceipt` function was defined but **not exported** from `module.exports` → backend crashed with 500 on confirm-receipt API call

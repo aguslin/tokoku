@@ -29,7 +29,6 @@ const STATUS_LABELS: Record<string, string> = {
   confirmed: 'Dikonfirmasi',
   processing: 'Diproses',
   shipped: 'Dikirim',
-  delivered: 'Terkirim',
   completed: 'Selesai',
   cancelled: 'Dibatalkan',
   refunded: 'Dikembalikan',
@@ -41,7 +40,6 @@ const STATUS_STYLES: Record<string, string> = {
   confirmed: 'bg-blue-100 text-blue-600',
   processing: 'bg-info/10 text-info',
   shipped: 'bg-primary/10 text-primary',
-  delivered: 'bg-success/10 text-success',
   completed: 'bg-success/10 text-success',
   cancelled: 'bg-destructive/10 text-destructive',
   refunded: 'bg-destructive/10 text-destructive',
@@ -65,7 +63,7 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
   partially_refunded: 'bg-warning/10 text-warning',
 };
 
-const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'delivered', 'cancelled'];
+const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'cancelled'];
 
 function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?: string }>) {
   const [data, setData] = useState<T | null>(null);
@@ -740,12 +738,12 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch, refet
         quantity: item.quantity,
         price: item.price,
       })),
-      Payments: (lo.paymentProof || lo.status === 'paid' || lo.status === 'confirmed' || lo.status === 'processing' || lo.status === 'shipped' || lo.status === 'delivered' || lo.status === 'completed') ? [{
+      Payments: (lo.paymentProof || lo.status === 'paid' || lo.status === 'confirmed' || lo.status === 'processing' || lo.status === 'shipped' || lo.status === 'completed') ? [{
         id: '',
-        status: ['confirmed', 'processing', 'shipped', 'delivered', 'completed'].includes(lo.status) ? 'paid' : lo.paymentProof ? 'submitted' : 'pending',
+        status: ['confirmed', 'processing', 'shipped', 'completed'].includes(lo.status) ? 'paid' : lo.paymentProof ? 'submitted' : 'pending',
         paymentMethodId: '',
         amount: lo.total,
-        paidAt: ['confirmed', 'processing', 'shipped', 'delivered', 'completed'].includes(lo.status) ? new Date().toISOString() : null,
+        paidAt: ['confirmed', 'processing', 'shipped', 'completed'].includes(lo.status) ? new Date().toISOString() : null,
         transactionId: null,
         metadata: lo.paymentProof ? { proofUrl: lo.paymentProof } : null,
         PaymentMethod: lo.paymentMethod ? { id: '', name: lo.paymentMethod, code: '' } : null,
@@ -768,7 +766,7 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch, refet
 
   const PRIORITY: Record<string, number> = {
     paid: 0, confirmed: 1, processing: 2, shipped: 3,
-    pending: 4, delivered: 5, completed: 6, cancelled: 7, refunded: 8,
+    pending: 4, completed: 5, cancelled: 6, refunded: 7,
   };
 
   const filtered = allOrders
@@ -786,29 +784,23 @@ function OrdersSection({ data, loading, error, refetch, search, setSearch, refet
     const res = await adminApi.put(`/orders/${selected.id}/status`, { status: newStatus });
     if (!res.success) {
       updateLocalOrderStatus(selected.id, newStatus as Order['status']);
-      if (['shipped', 'delivered', 'completed'].includes(newStatus)) {
+      if (newStatus === 'shipped') {
         const orderItems = selected.OrderItems || (selected as any).items;
         if (orderItems) {
           for (const item of orderItems) {
             const productRes = await adminApi.get<any>(`/products/${item.productId}`);
             if (productRes.success && productRes.data) {
-              if (newStatus === 'shipped') {
-                const currentStock = Number(productRes.data.stock ?? 0);
-                await adminApi.put(`/products/${item.productId}`, { stock: Math.max(0, currentStock - item.quantity) });
-              }
-              if (newStatus === 'delivered' || newStatus === 'completed') {
-                const currentSold = Number(productRes.data.sold ?? 0);
-                await adminApi.put(`/products/${item.productId}`, { sold: currentSold + item.quantity });
-              }
+              const currentStock = Number(productRes.data.stock ?? 0);
+              await adminApi.put(`/products/${item.productId}`, { stock: Math.max(0, currentStock - item.quantity) });
             } else {
-              console.warn('[Admin] Failed to update product stock/sold for', item.productId, productRes.error);
+              console.warn('[Admin] Failed to update product stock for', item.productId, productRes.error);
             }
           }
         }
       }
     }
     setUpdating(false); setSelected(null); refetch();
-    if (['shipped', 'delivered', 'completed'].includes(newStatus)) refetchProducts?.();
+    if (newStatus === 'shipped') refetchProducts?.();
   };
 
   if (loading) return <TableSkeleton />;

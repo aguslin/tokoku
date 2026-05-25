@@ -341,8 +341,7 @@ const updateStatus = async (orderId, status) => {
     [ORDER_STATUS.PAID]: [ORDER_STATUS.CONFIRMED, ORDER_STATUS.CANCELLED],
     [ORDER_STATUS.CONFIRMED]: [ORDER_STATUS.PROCESSING, ORDER_STATUS.CANCELLED],
     [ORDER_STATUS.PROCESSING]: [ORDER_STATUS.SHIPPED, ORDER_STATUS.CANCELLED],
-    [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.DELIVERED],
-    [ORDER_STATUS.DELIVERED]: [ORDER_STATUS.COMPLETED, ORDER_STATUS.REFUNDED],
+    [ORDER_STATUS.SHIPPED]: [ORDER_STATUS.COMPLETED, ORDER_STATUS.REFUNDED],
   };
 
   const allowed = validTransitions[order.status];
@@ -367,9 +366,6 @@ const updateStatus = async (orderId, status) => {
       logger.info(`[STOCK DECREMENT] Product ${item.productId} (${item.productName}): stock ${before?.stock} -> ${after?.stock} (decrement by ${item.quantity})`);
     }
   }
-  if (status === ORDER_STATUS.DELIVERED) {
-    updates.deliveredAt = new Date();
-  }
   if (status === ORDER_STATUS.CANCELLED && order.status === ORDER_STATUS.PAID) {
     await Payment.update(
       { status: 'failed' },
@@ -393,8 +389,8 @@ const confirmReceipt = async (orderId, userId) => {
   if (order.userId !== userId) {
     throw ApiError.forbidden('You are not authorized to confirm this order');
   }
-  if (order.status !== ORDER_STATUS.DELIVERED) {
-    throw ApiError.badRequest('Order must be delivered before confirming receipt');
+  if (order.status !== ORDER_STATUS.SHIPPED) {
+    throw ApiError.badRequest('Order must be shipped before confirming receipt');
   }
 
   const items = await OrderItem.findAll({ where: { orderId } });

@@ -285,7 +285,7 @@ export default function OrderDetailPage() {
           <Button variant="outline" onClick={() => router.push('/orders')}>
             Kembali
           </Button>
-          {order.status === 'delivered' && (
+          {order.status === 'shipped' && (
             <Button variant="primary" onClick={async () => {
               const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
               let apiSucceeded = false;
