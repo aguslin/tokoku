@@ -1,0 +1,16 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "next build",
+  "installCommand": "npm install",
+  "outputDirectory": ".next",
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "@vercel/node@5",
+      "maxDuration": 60
+    }
+  },
+  "routes": [
+    { "src": "/api/v1/(.*)", "dest": "/api/v1/$1" },
+    { "src": "/uploads/(.*)", "dest": "/api/uploads/$1" }
+  ]
+}

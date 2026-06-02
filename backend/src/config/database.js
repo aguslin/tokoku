@@ -1,34 +1,52 @@
 require('dotenv').config();
 
+function parseDatabaseUrl(url) {
+  if (!url) return null;
+  try {
+    const parsed = new URL(url);
+    return {
+      username: decodeURIComponent(parsed.username),
+      password: decodeURIComponent(parsed.password),
+      database: parsed.pathname.slice(1),
+      host: parsed.hostname,
+      port: parseInt(parsed.port, 10) || 5432,
+    };
+  } catch {
+    return null;
+  }
+}
+
+const neonConfig = parseDatabaseUrl(process.env.DATABASE_URL);
+
 module.exports = {
   development: {
-    username: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: process.env.DB_NAME || 'marketplace',
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT, 10) || 5432,
+    username: neonConfig?.username || process.env.DB_USER || 'postgres',
+    password: neonConfig?.password || process.env.DB_PASSWORD || 'postgres',
+    database: neonConfig?.database || process.env.DB_NAME || 'marketplace',
+    host: neonConfig?.host || process.env.DB_HOST || 'localhost',
+    port: neonConfig?.port || parseInt(process.env.DB_PORT, 10) || 5432,
     dialect: 'postgres',
     logging: console.log,
     seederStorage: 'sequelize',
     seederStorageTableName: 'SequelizeData',
   },
   test: {
-    username: process.env.DB_USER || 'postgres',
-    password: process.env.DB_PASSWORD || 'postgres',
-    database: `${process.env.DB_NAME || 'marketplace'}_test`,
-    host: process.env.DB_HOST || 'localhost',
-    port: parseInt(process.env.DB_PORT, 10) || 5432,
+    username: neonConfig?.username || process.env.DB_USER || 'postgres',
+    password: neonConfig?.password || process.env.DB_PASSWORD || 'postgres',
+    database: `${neonConfig?.database || process.env.DB_NAME || 'marketplace'}_test`,
+    host: neonConfig?.host || process.env.DB_HOST || 'localhost',
+    port: neonConfig?.port || parseInt(process.env.DB_PORT, 10) || 5432,
     dialect: 'postgres',
     logging: false,
     seederStorage: 'sequelize',
     seederStorageTableName: 'SequelizeData',
   },
   production: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
-    port: parseInt(process.env.DB_PORT, 10) || 5432,
+    username: neonConfig?.username || process.env.DB_USER,
+    password: neonConfig?.password || process.env.DB_PASSWORD,
+    database: neonConfig?.database || process.env.DB_NAME,
+    host: neonConfig?.host || process.env.DB_HOST,
+    port: neonConfig?.port || parseInt(process.env.DB_PORT, 10) || 5432,
     dialect: 'postgres',
     logging: false,
     dialectOptions: {
@@ -41,7 +59,7 @@ module.exports = {
     seederStorageTableName: 'SequelizeData',
     pool: {
       max: 10,
-      min: 2,
+      min: 0,
       acquire: 30000,
       idle: 10000,
     },

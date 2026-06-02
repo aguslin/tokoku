@@ -8,6 +8,11 @@ const nextConfig = {
     unoptimized: true,
   },
   async rewrites() {
+    // In production (Vercel), API routes are handled by serverless functions
+    // In development, proxy to local Express backend
+    if (process.env.NODE_ENV === 'production') {
+      return [];
+    }
     return [
       {
         source: '/api/v1/:path*',
