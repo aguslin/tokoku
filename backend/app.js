@@ -101,6 +101,18 @@ app.use((err, _req, res, _next) => {
     message = err.message;
   }
 
+  // Handle malformed JSON in request body
+  if (err.type === 'entity.parse.failed') {
+    statusCode = HTTP_STATUS.BAD_REQUEST;
+    message = 'Invalid JSON in request body';
+  }
+
+  // Handle database connection / external service errors
+  if (err.code === 'ECONNREFUSED' || err.code === 'ETIMEDOUT') {
+    statusCode = HTTP_STATUS.SERVICE_UNAVAILABLE;
+    message = 'Service temporarily unavailable';
+  }
+
   if (!appConfig.isDev && !err.isOperational) {
     statusCode = HTTP_STATUS.INTERNAL_SERVER_ERROR;
     message = 'Internal server error';
