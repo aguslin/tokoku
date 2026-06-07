@@ -475,31 +475,45 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
      setShow(true);
    };
 
-   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
      const files = e.target.files;
      if (!files?.length) return;
      setUploading(true);
-     try {
-       const formData = new FormData();
-       for (const f of files) formData.append('images', f);
-       const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
-       const token = localStorage.getItem('admin-token');
-       const res = await fetch(`${apiUrl}/upload/images`, {
-         method: 'POST',
-         headers: { Authorization: `Bearer ${token}` },
-         body: formData,
-       });
-       const json = await res.json();
-       if (json.success && json.data) {
-         const urls = json.data.map((f: any) => f.url);
-         setUploadedImages(prev => [...prev, ...urls]);
-       }
-     } catch (err) {
-       console.error('Upload failed', err);
-     } finally {
-       setUploading(false);
-       if (e.target) e.target.value = '';
-     }
+     let completed = 0;
+     const total = files.length;
+
+     const processFile = (file: File) => {
+       const img = new Image();
+       img.onload = () => {
+         const MAX = 800;
+         let w = img.width, h = img.height;
+         if (w > MAX) { h = Math.round(h * MAX / w); w = MAX; }
+         const canvas = document.createElement('canvas');
+         canvas.width = w;
+         canvas.height = h;
+         canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
+         const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+         setUploadedImages(prev => [...prev, dataUrl]);
+         URL.revokeObjectURL(img.src);
+         completed++;
+         if (completed === total) setUploading(false);
+       };
+       img.onerror = () => {
+         // Fallback: read raw file as base64
+         const reader = new FileReader();
+         reader.onload = () => {
+           setUploadedImages(prev => [...prev, reader.result as string]);
+           completed++;
+           if (completed === total) setUploading(false);
+         };
+         reader.onerror = () => { completed++; if (completed === total) setUploading(false); };
+         reader.readAsDataURL(file);
+       };
+       img.src = URL.createObjectURL(file);
+     };
+
+     Array.from(files).forEach(processFile);
+     if (e.target) e.target.value = '';
    };
 
    const removeImage = (url: string) => {
