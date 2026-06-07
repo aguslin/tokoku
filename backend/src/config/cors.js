@@ -3,7 +3,8 @@ const appConfig = require('./app');
 const corsOptions = {
   origin: function (origin, callback) {
     const allowedOrigins = appConfig.corsOrigin.split(',').map((o) => o.trim());
-    if (!origin || allowedOrigins.includes(origin) || appConfig.isDev) {
+    // Handle wildcard — allow all origins when CORS_ORIGIN is "*"
+    if (!origin || allowedOrigins.includes('*') || allowedOrigins.includes(origin) || appConfig.isDev) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
