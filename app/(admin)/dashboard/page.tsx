@@ -482,7 +482,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
      try {
        const formData = new FormData();
        for (const f of files) formData.append('images', f);
-       const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+       const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
        const token = localStorage.getItem('admin-token');
        const res = await fetch(`${apiUrl}/upload/images`, {
          method: 'POST',

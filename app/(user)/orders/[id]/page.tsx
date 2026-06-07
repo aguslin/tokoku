@@ -287,7 +287,7 @@ export default function OrderDetailPage() {
           </Button>
           {order.status === 'shipped' && (
             <Button variant="primary" onClick={async () => {
-              const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+              const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
               let apiSucceeded = false;
               try {
                 const token = JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.token;

@@ -44,7 +44,7 @@ export default function RegisterPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
       const res = await fetch(`${apiUrl}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

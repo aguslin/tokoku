@@ -51,7 +51,7 @@ export const paymentApi = {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    return fetch(`/api/v1${BASE_URL}/${orderId}/proof`, {
+    return fetch(`/_/backend/api/v1${BASE_URL}/${orderId}/proof`, {
       method: 'POST',
       body: formData,
       headers,

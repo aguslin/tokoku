@@ -31,7 +31,7 @@ export default function MarketplacePage() {
     const fetchProducts = async () => {
       try {
         setError(null);
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
         const res = await fetch(`${apiUrl}/products?limit=50`);
         const json = await res.json();
         if (json.success && json.data?.products) {

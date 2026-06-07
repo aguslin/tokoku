@@ -1,7 +1,7 @@
-const app = require('../../backend/app');
-const { sequelize } = require('../../backend/src/models');
+const app = require('../app');
+const { sequelize } = require('../src/models');
 
-// Cache the sequelize connection across invocations
+// Cache the sequelize connection across Vercel invocations
 let isConnected = false;
 
 async function ensureConnection() {
@@ -11,7 +11,7 @@ async function ensureConnection() {
   }
 }
 
-// Vercel serverless function handler
+// Vercel serverless function handler for the backend service
 module.exports = async (req, res) => {
   try {
     await ensureConnection();

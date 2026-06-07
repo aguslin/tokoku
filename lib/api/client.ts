@@ -25,7 +25,7 @@ export class ApiClient {
   constructor(baseUrl?: string) {
     this.baseUrl = baseUrl || (typeof window !== 'undefined'
       ? (window as any).__NEXT_DATA__?.props?.apiUrl || ''
-      : '') || process.env.NEXT_PUBLIC_API_URL || '';
+      : '') || process.env.NEXT_PUBLIC_API_URL || '/_/backend';
   }
 
   private buildHeaders(options: FetchOptions): HeadersInit {

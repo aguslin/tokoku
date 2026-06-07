@@ -36,7 +36,7 @@ export default function ProductDetailPage() {
         
         setLoading(true);
         setError('');
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
         
         const productId = params.id;
         console.log('Fetching product with ID:', productId);
