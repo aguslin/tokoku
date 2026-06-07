@@ -58,7 +58,8 @@ export default function RegisterPage() {
       if (json.success) {
         router.push('/login');
       } else {
-        setError(json.message || 'Registrasi gagal. Silakan coba lagi.');
+        const msg = json.errors?.join(', ') || json.message || 'Registrasi gagal. Silakan coba lagi.';
+        setError(msg);
       }
     } catch (e: any) {
       setError(e?.message || 'Gagal terhubung ke server. Periksa koneksi Anda.');
@@ -115,7 +116,7 @@ export default function RegisterPage() {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Minimal 8 karakter"
+                placeholder="Min 8 karakter, 1 huruf besar, 1 huruf kecil, 1 angka"
                 {...form.register('password', {
                   onChange: (e) => checkPasswordStrength(e.target.value),
                 })}

@@ -9,7 +9,11 @@ export const loginSchema = z.object({
 export const registerSchema = z.object({
   email: z.string().email('Email tidak valid'),
   name: z.string().min(2, 'Nama minimal 2 karakter'),
-  password: z.string().min(8, 'Kata sandi minimal 8 karakter'),
+  password: z.string()
+    .min(8, 'Kata sandi minimal 8 karakter')
+    .regex(/[a-z]/, 'Kata sandi harus mengandung minimal 1 huruf kecil')
+    .regex(/[A-Z]/, 'Kata sandi harus mengandung minimal 1 huruf besar')
+    .regex(/\d/, 'Kata sandi harus mengandung minimal 1 angka'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'Kata sandi tidak cocok',
