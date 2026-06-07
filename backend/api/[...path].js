@@ -24,10 +24,12 @@ async function handler(req, res) {
       const db = require('../src/models');
       sequelize = db.sequelize;
     } catch (err) {
-      console.error('Failed to initialize backend:', err.message);
+      console.error('Failed to initialize backend:', err);
       return res.status(503).json({
         success: false,
-        message: 'Backend service is initializing. Please try again in a moment.',
+        message: 'Backend initialization failed',
+        error: err.message,
+        stack: err.stack ? err.stack.split('\n').slice(0, 10) : undefined,
       });
     }
   }
