@@ -22,12 +22,12 @@ After every `git push` to `main`, the agent MUST:
 
 ## Key Conventions
 
-- **CRITICAL: Git author MUST be `agussukiawan@gmail.com`** — Every commit MUST use:
+- **CRITICAL: Git author MUST be `aguslin@users.noreply.github.com`** — Every commit MUST use:
   ```
-  git config user.email "agussukiawan@gmail.com"
-  git config user.name "Agus Sukiawan"
+  git config user.email "aguslin@users.noreply.github.com"
+  git config user.name "aguslin"
   ```
-  Using any other email will cause the GitHub account to be BLOCKED. Never commit with the default/root email.
+  This matches the GitHub repo owner (`aguslin`) and prevents Vercel deployment blocks on Hobby Plan. Never use other emails.
 - Always push from `/home/z/my-project/tokoku` directory.
 - Branch mapping: local `feat/z.ai` → remote `main` via:
   ```
