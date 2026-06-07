@@ -8,7 +8,8 @@ const getAll = catchAsync(async (req, res) => {
 });
 
 const getFeatured = catchAsync(async (req, res) => {
-  const data = await productService.getFeatured(req.query);
+  const limit = req.query.limit || 8;
+  const data = await productService.getFeatured(limit);
   ApiResponse.success(res, data, 'Featured products retrieved successfully');
 });
 
