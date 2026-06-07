@@ -18,8 +18,6 @@ export default function LoginPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [debugLog, setDebugLog] = useState<string[]>([]);
-  const [showDebug, setShowDebug] = useState(true);
   const loginSuccess = useAuthStore((s) => s.loginSuccess);
 
   const form = useForm({
@@ -30,51 +28,17 @@ export default function LoginPage() {
     },
   });
 
-  const log = (msg: string) => {
-    console.log('[LOGIN-DEBUG]', msg);
-    setDebugLog((prev) => [...prev, `[${new Date().toISOString().split('T')[1].slice(0, 8)}] ${msg}`]);
-  };
-
   const onSubmit = async (data: any) => {
     setIsLoading(true);
     setError(null);
-    setDebugLog([]);
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
-      const fullUrl = `${apiUrl}/auth/login`;
-      log(`POST ${fullUrl}`);
-      log(`Body: ${JSON.stringify({ email: data.email, password: '***' })}`);
-
-      let res;
-      try {
-        res = await fetch(fullUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(data),
-        });
-      } catch (fetchErr: any) {
-        log(`FETCH ERROR: ${fetchErr.message}`);
-        throw new Error(`Gagal terhubung ke server: ${fetchErr.message}`);
-      }
-
-      log(`Response status: ${res.status} ${res.statusText}`);
-      log(`Response headers: content-type=${res.headers.get('content-type')}`);
-
-      // Read raw text first for debugging
-      const rawText = await res.text().catch(() => '');
-      log(`Raw response (${rawText.length} chars): ${rawText.slice(0, 500)}`);
-
-      let json;
-      try {
-        json = JSON.parse(rawText);
-      } catch {
-        log(`JSON parse failed. Raw text shown above.`);
-        throw new Error(`Server returned non-JSON (${res.status}): ${rawText.slice(0, 200)}`);
-      }
-
-      log(`Parsed JSON keys: ${Object.keys(json).join(', ')}`);
-      if (json.debug) log(`Debug info: ${JSON.stringify(json.debug)}`);
-
+      const res = await fetch(`${apiUrl}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
       if (json.success && json.data) {
         loginSuccess(json.data);
         const token = json.data.tokens.accessToken;
@@ -88,9 +52,6 @@ export default function LoginPage() {
         router.push(role === 'admin' ? '/dashboard' : '/marketplace');
       } else {
         setError(json.message || 'Email atau password salah.');
-        if (json.debug) {
-          setError((prev) => `${prev} [Debug: ${JSON.stringify(json.debug)}]`);
-        }
       }
     } catch (e: any) {
       setError(e?.message || 'Gagal terhubung ke server. Periksa koneksi Anda.');
@@ -113,7 +74,7 @@ export default function LoginPage() {
         {error && (
           <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 rounded-lg flex items-start gap-2 text-sm text-destructive">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
-            <span className="whitespace-pre-wrap break-words">{error}</span>
+            <span>{error}</span>
           </div>
         )}
 
@@ -148,26 +109,6 @@ export default function LoginPage() {
             {isLoading ? 'Memproses...' : translations.auth.login}
           </Button>
         </form>
-
-        {/* Debug log panel */}
-        {debugLog.length > 0 && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={() => setShowDebug(!showDebug)}
-              className="text-xs text-muted-foreground hover:underline w-full text-left mb-1"
-            >
-              {showDebug ? 'Hide' : 'Show'} Debug Log ({debugLog.length} entries)
-            </button>
-            {showDebug && (
-              <div className="bg-gray-950 text-green-400 text-xs font-mono p-3 rounded-lg overflow-auto max-h-60 whitespace-pre-wrap break-all">
-                {debugLog.map((entry, i) => (
-                  <div key={i}>{entry}</div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         <div className="relative my-6">
           <div className="absolute inset-0 flex items-center">
