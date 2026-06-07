@@ -39,6 +39,8 @@ After every `git push` to `main`, the agent MUST:
 
 ## Known Vercel Serverless Constraints
 
+- **No pnpm** — Project uses `npm` (not `pnpm`). Never commit `pnpm-lock.yaml` or `pnpm-workspace.yaml`.
 - **Read-only filesystem** — Winston file transports must be skipped (detected via `process.env.VERCEL`).
-- **Module resolution** — Backend `pg`, `sequelize`, etc. must be findable. Root `package.json` includes backend deps as a workaround.
+- **Module resolution** — Root `package.json` includes backend deps (`pg`, `sequelize`, `express`, etc.) so `@vercel/node` builder can resolve them.
 - **No `server.js`** — Backend runs as serverless function, not a long-running server.
+- **Install lockfile consistency** — Always run `npm install` and commit the updated `package-lock.json` after modifying `package.json`.
