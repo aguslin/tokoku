@@ -114,7 +114,18 @@ app.use((err, _req, res, _next) => {
     });
   }
 
-  return ApiResponse.error(res, message, statusCode, errors);
+  const responsePayload = {
+    success: false,
+    message,
+  };
+  if (errors) responsePayload.errors = errors;
+
+  // Include real error details on Vercel for debugging
+  if (!appConfig.isDev && err.message && !err.isOperational) {
+    responsePayload.debug = { error: err.message, name: err.name };
+  }
+
+  return res.status(statusCode).json(responsePayload);
 });
 
 module.exports = app;

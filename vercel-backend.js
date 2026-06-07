@@ -10,14 +10,23 @@ const path = require('path');
 const backendDir = path.resolve(__dirname, 'backend');
 
 // Force ncc to bundle the PostgreSQL dialect packages
-// (Sequelize loads them via string matching, not static require)
 require('pg');
 require('pg-hstore');
 
-// Load environment variables from backend/.env
+// Load environment variables from backend/.env (if file exists on Vercel)
 require('dotenv').config({ path: path.join(backendDir, '.env') });
 
+// Set defaults for required env vars if not already set
+// (backend/.env is gitignored, so these act as Vercel defaults)
+if (!process.env.DATABASE_URL) {
+  process.env.DATABASE_URL = 'postgresql://neondb_owner:npg_EZ91WmoXrwyf@ep-noisy-bonus-aokfl0ci-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require';
+}
 if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production';
+if (!process.env.JWT_SECRET) process.env.JWT_SECRET = 'tokoku_jwt_secret_2024_production_key';
+if (!process.env.JWT_REFRESH_SECRET) process.env.JWT_REFRESH_SECRET = 'tokoku_jwt_refresh_secret_2024_production_key';
+if (!process.env.JWT_EXPIRES_IN) process.env.JWT_EXPIRES_IN = '15m';
+if (!process.env.JWT_REFRESH_EXPIRES_IN) process.env.JWT_REFRESH_EXPIRES_IN = '7d';
+if (!process.env.CORS_ORIGIN) process.env.CORS_ORIGIN = '*';
 
 // Load the Express app
 let app;
