@@ -88,7 +88,7 @@ function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?
 
 interface UserData { id: string; name: string; email: string; phone: string; isActive: boolean; createdAt: string; }
 interface Category { id: string; name: string; slug: string; description: string; isActive: boolean; sortOrder: number; }
-interface Product { id: string; name: string; slug: string; price: number; stock: number; sku: string; isActive: boolean; isFeatured: boolean; categoryId: string; }
+interface Product { id: string; name: string; slug: string; price: number; stock: number; sku: string; isActive: boolean; isFeatured: boolean; categoryId: string; weight?: number; weightUom?: string; }
 interface OrderPayment { id: string; status: string; paymentMethodId: string; amount: number; paidAt: string | null; transactionId: string | null; metadata: { proofUrl?: string } | null; PaymentMethod?: { id: string; name: string; code: string } | null; }
 interface Order { id: string; orderNumber: string; status: string; total: number; subtotal: number; shippingCost: number; notes: string; createdAt: string; userId: string; paidAt: string | null; Payments?: OrderPayment[]; OrderItems?: { id: string; productId: string; productName: string; quantity: number; price: number; }[]; }
 interface Voucher { id: string; code: string; name: string; type: string; value: number; minOrder: number; maxDiscount: number | null; usageLimit: number | null; usedCount: number; startsAt: string; endsAt: string; isActive: boolean; }
@@ -450,7 +450,7 @@ function getProductImageUrl(p: any): string {
 function ProductsSection({ data, loading, error, refetch, search, setSearch, categories }: any) {
    const [show, setShow] = useState(false);
    const [edit, setEdit] = useState<any>(null);
-   const [form, setForm] = useState({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', weight: 0, isActive: true, isFeatured: false, categoryId: '' });
+   const [form, setForm] = useState({ name: '', slug: '', description: '', price: '', comparePrice: '', stock: 0, sku: '', weight: '', weightUom: 'kg', isActive: true, isFeatured: false, categoryId: '' });
    const [saving, setSaving] = useState(false);
    const [deleteId, setDeleteId] = useState<string | null>(null);
    const [uploading, setUploading] = useState(false);
@@ -462,14 +462,14 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
 
    const openCreate = () => {
      setEdit(null);
-     setForm({ name: '', slug: '', description: '', price: 0, comparePrice: 0, stock: 0, sku: '', weight: 0, isActive: true, isFeatured: false, categoryId: '' });
+     setForm({ name: '', slug: '', description: '', price: '', comparePrice: '', stock: 0, sku: '', weight: '', weightUom: 'kg', isActive: true, isFeatured: false, categoryId: '' });
      setUploadedImages([]);
      setShow(true);
    };
 
    const openEdit = (p: Product) => {
      setEdit(p);
-     setForm({ name: p.name, slug: p.slug, description: p.description || '', price: p.price, comparePrice: p.comparePrice || 0, stock: p.stock, sku: p.sku || '', weight: p.weight || 0, isActive: p.isActive, isFeatured: p.isFeatured, categoryId: p.categoryId || '' });
+     setForm({ name: p.name, slug: p.slug, description: p.description || '', price: String(Number(p.price)), comparePrice: p.comparePrice ? String(Number(p.comparePrice)) : '', stock: p.stock, sku: p.sku || '', weight: p.weight ? String(Number(p.weight)) : '', weightUom: (p as any).weightUom || 'kg', isActive: p.isActive, isFeatured: p.isFeatured, categoryId: p.categoryId || '' });
      const existing = (p.ProductImages || []).map((i: any) => i.url);
      setUploadedImages(existing);
      setShow(true);
@@ -525,9 +525,11 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
      const payload: Record<string, any> = {
        ...form,
        slug: form.slug || form.name.toLowerCase().replace(/\s+/g, '-'),
-       price: Number(form.price),
-       comparePrice: Number(form.comparePrice) || null,
+       price: Number(String(form.price).replace(/[^0-9.]/g, '')) || 0,
+       comparePrice: Number(String(form.comparePrice).replace(/[^0-9.]/g, '')) || null,
        stock: Number(form.stock),
+       weight: Number(String(form.weight).replace(/[^0-9.]/g, '')) || 0,
+       weightUom: form.weightUom || 'kg',
        images: uploadedImages.map((url, i) => ({
          url,
          isPrimary: i === 0,
@@ -677,12 +679,23 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
                placeholder="Deskripsi produk..." />
            </div>
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-             <InputField label="Harga" type="number" value={String(form.price)} onChange={v => setForm(f => ({ ...f, price: Number(v) }))} />
-             <InputField label="Harga Asli" type="number" value={String(form.comparePrice)} onChange={v => setForm(f => ({ ...f, comparePrice: Number(v) }))} />
+             <InputField label="Harga" type="text" value={form.price ? Number(form.price.replace(/[^0-9.]/g, '')).toLocaleString('id-ID') : ''} onChange={v => setForm(f => ({ ...f, price: v.replace(/[^0-9]/g, '') }))} />
+             <InputField label="Harga Asli" type="text" value={form.comparePrice ? Number(form.comparePrice.replace(/[^0-9.]/g, '')).toLocaleString('id-ID') : ''} onChange={v => setForm(f => ({ ...f, comparePrice: v.replace(/[^0-9]/g, '') }))} />
            </div>
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
              <InputField label="Stok" type="number" value={String(form.stock)} onChange={v => setForm(f => ({ ...f, stock: Number(v) }))} />
-             <InputField label="Berat (kg)" type="number" value={String(form.weight)} onChange={v => setForm(f => ({ ...f, weight: Number(v) }))} />
+             <div className="flex gap-2 items-end">
+               <div className="flex-1">
+                 <InputField label="Berat" type="text" value={form.weight ? Number(form.weight.replace(/[^0-9.]/g, '')).toLocaleString('id-ID') : ''} onChange={v => setForm(f => ({ ...f, weight: v.replace(/[^0-9.]/g, '') }))} />
+               </div>
+               <div className="pb-0.5">
+                 <select value={form.weightUom} onChange={e => setForm(f => ({ ...f, weightUom: e.target.value }))}
+                   className="w-20 px-2 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                   <option value="kg">Kg</option>
+                   <option value="gram">Gram</option>
+                 </select>
+               </div>
+             </div>
            </div>
            <div>
              <label className="block text-sm font-medium mb-1">Kategori</label>
@@ -699,7 +712,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
                  <div key={i} className="relative w-full aspect-square rounded-lg border border-border overflow-hidden group">
                    <img src={url} alt="" className="w-full h-full object-cover" />
                    <button onClick={() => removeImage(url)}
-                     className="absolute top-1 right-1 w-6 h-6 bg-destructive text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity">&times;</button>
+                     className="absolute top-1 right-1 w-6 h-6 bg-destructive text-white rounded-full flex items-center justify-center text-xs shadow-sm hover:bg-red-600">&times;</button>
                  </div>
                ))}
                <label className="w-full aspect-square rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary transition-colors bg-white/50">

@@ -217,6 +217,9 @@ export default function ProductDetailPage() {
               <h1 className="text-2xl font-bold text-foreground">{product.name}</h1>
               <div className="flex items-center gap-3 mt-2">
                 <span className="text-sm text-muted-foreground">Stok: {product.stock}</span>
+                {Number(product.weight) > 0 && (
+                  <span className="text-sm text-muted-foreground">Berat: {product.weight} {product.weightUom === 'gram' ? 'gram' : 'Kg'}</span>
+                )}
               </div>
             </div>
 

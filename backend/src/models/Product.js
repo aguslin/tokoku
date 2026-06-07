@@ -40,6 +40,10 @@ module.exports = (sequelize, DataTypes) => {
     weight: {
       type: DataTypes.DECIMAL(10, 2),
     },
+    weightUom: {
+      type: DataTypes.STRING,
+      defaultValue: 'kg',
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,

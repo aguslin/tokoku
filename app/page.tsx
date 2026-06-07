@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
-import { ShoppingCart, Zap, Truck, Shield, Sparkles, ArrowRight, Heart } from 'lucide-react';
+import { ShoppingCart, Zap, Truck, Shield, Sparkles, ArrowRight, Heart, Loader2 } from 'lucide-react';
 import { Card } from '@/components/shared/card';
 import { Badge } from '@/components/shared/badge';
 import { RatingStars } from '@/components/shared/rating-stars';
 import { translations } from '@/lib/i18n/id';
 import { formatCurrency } from '@/lib/utils/currency';
-import { MOCK_PRODUCTS, MOCK_CATEGORIES, MOCK_TESTIMONIALS } from '@/lib/mock-data/products';
+import { MOCK_CATEGORIES, MOCK_TESTIMONIALS } from '@/lib/mock-data/products';
 import { useAuthStore } from '@/lib/store';
 
 const btnPrimary = 'inline-flex items-center justify-center gap-2 font-medium rounded-md transition-all duration-200 px-4 py-2.5 text-sm h-10 bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/80';
@@ -21,12 +21,32 @@ const btnOutlineLg = 'inline-flex items-center justify-center gap-2 font-medium 
 export default function PreLoginPage() {
   const router = useRouter();
   const { isAuthenticated } = useAuthStore();
+  const [featuredProducts, setFeaturedProducts] = useState<any[]>([]);
+  const [loadingFeatured, setLoadingFeatured] = useState(true);
 
   useEffect(() => {
     if (isAuthenticated) {
       router.replace('/marketplace');
     }
   }, [isAuthenticated, router]);
+
+  useEffect(() => {
+    const fetchFeatured = async () => {
+      try {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || '/_/backend/api/v1';
+        const res = await fetch(`${apiUrl}/products/featured?limit=8`);
+        const json = await res.json();
+        if (json.success && json.data) {
+          setFeaturedProducts(json.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch featured products', err);
+      } finally {
+        setLoadingFeatured(false);
+      }
+    };
+    fetchFeatured();
+  }, []);
 
   return (
     <main className="min-h-screen bg-background">
@@ -112,123 +132,63 @@ export default function PreLoginPage() {
       </section>
 
 
-      {/* Flash Sale */}
+      {/* Featured Products dari API */}
       <section className="py-12 lg:py-16 border-b border-border bg-secondary/5">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <Badge variant="destructive" className="mb-2">
-                <Zap className="w-3 h-3 mr-1" />
-                Flash Sale
+              <Badge variant="info" className="mb-2">
+                <Sparkles className="w-3 h-3 mr-1" />
+                Unggulan
               </Badge>
-              <h2 className="text-3xl font-bold text-foreground">Penawaran Terbatas</h2>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-muted-foreground">Berakhir dalam</p>
-              <p className="text-2xl font-bold text-destructive">02:45:30</p>
+              <h2 className="text-3xl font-bold text-foreground">Produk Unggulan</h2>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {MOCK_PRODUCTS.filter(p => p.badge === 'flash-sale').map((product) => (
-              <Card key={product.id} hoverable className="overflow-hidden flex flex-col">
-                <div className="relative h-48 bg-muted mb-4 -mx-4 -mt-4 -mb-4">
-                  <div className="absolute inset-0">
-                    <Image
-                      src={product.image}
-                      alt={product.name}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                  {product.discount && (
-                    <Badge variant="destructive" className="absolute top-2 right-2">
-                      -{product.discount}%
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="flex-1 space-y-2">
-                  <h3 className="font-semibold text-foreground line-clamp-2 text-sm">{product.name}</h3>
-                  <RatingStars rating={product.rating} size="sm" />
-                  <p className="text-xs text-muted-foreground">{product.reviewCount} ulasan</p>
-                </div>
-
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-lg font-bold text-primary">{formatCurrency(product.price)}</span>
-                    {product.originalPrice && (
-                      <span className="text-sm text-muted-foreground line-through">
-                        {formatCurrency(product.originalPrice)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{product.sold} terjual</p>
-                </div>
-              </Card>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Featured Products */}
-      <section className="py-12 lg:py-16 border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-foreground mb-8">Produk Unggulan</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {MOCK_PRODUCTS.map((product) => (
-              <Card key={product.id} hoverable className="overflow-hidden flex flex-col">
-                <div className="relative h-48 bg-muted mb-4 -mx-4 -mt-4 -mb-4">
-                  <div className="absolute inset-0">
-                    <Image
-                      src={product.image}
-                      alt={product.name}
-                      fill
-                      className="object-cover"
-                    />
-                  </div>
-                  {product.badge && (
-                    <Badge
-                      variant={
-                        product.badge === 'flash-sale'
-                          ? 'destructive'
-                          : product.badge === 'trending'
-                          ? 'warning'
-                          : 'info'
-                      }
-                      className="absolute top-2 right-2"
-                    >
-                      {product.badge === 'flash-sale'
-                        ? 'Flash Sale'
-                        : product.badge === 'trending'
-                        ? 'Trending'
-                        : 'Baru'}
-                    </Badge>
-                  )}
-                </div>
-
-                <div className="flex-1 space-y-2">
-                  <p className="text-xs text-muted-foreground">{product.seller.name}</p>
-                  <h3 className="font-semibold text-foreground line-clamp-2 text-sm">{product.name}</h3>
-                  <RatingStars rating={product.rating} size="sm" />
-                  <p className="text-xs text-muted-foreground">{product.reviewCount} ulasan</p>
-                </div>
-
-                <div className="mt-3 space-y-2">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-lg font-bold text-primary">{formatCurrency(product.price)}</span>
-                    {product.originalPrice && (
-                      <span className="text-sm text-muted-foreground line-through">
-                        {formatCurrency(product.originalPrice)}
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-muted-foreground">{product.sold} terjual</p>
-                  <p className="text-xs text-success">Pengiriman dalam {product.deliveryDays} hari</p>
-                </div>
-              </Card>
-            ))}
-          </div>
+          {loadingFeatured ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="w-6 h-6 animate-spin text-primary" />
+            </div>
+          ) : featuredProducts.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {featuredProducts.map((product: any) => {
+                const imgUrl = product.ProductImages?.[0]?.url || '/placeholder.svg';
+                return (
+                  <Link key={product.id} href={`/marketplace/${product.slug || product.id}`}>
+                    <Card hoverable className="overflow-hidden flex flex-col">
+                      <div className="relative h-48 bg-muted mb-4 -mx-4 -mt-4 -mb-4">
+                        <div className="absolute inset-0">
+                          <Image src={imgUrl} alt={product.name} fill className="object-cover" />
+                        </div>
+                        {product.comparePrice && Number(product.comparePrice) > 0 && Number(product.price) < Number(product.comparePrice) && (
+                          <Badge variant="destructive" className="absolute top-2 right-2">
+                            -{Math.round(((Number(product.comparePrice) - Number(product.price)) / Number(product.comparePrice)) * 100)}%
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <h3 className="font-semibold text-foreground line-clamp-2 text-sm">{product.name}</h3>
+                        <p className="text-xs text-muted-foreground">{product.sold || 0} terjual</p>
+                      </div>
+                      <div className="mt-3 space-y-2">
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-lg font-bold text-primary">{formatCurrency(Number(product.price))}</span>
+                          {product.comparePrice && Number(product.comparePrice) > 0 && (
+                            <span className="text-sm text-muted-foreground line-through">{formatCurrency(Number(product.comparePrice))}</span>
+                          )}
+                        </div>
+                        {Number(product.weight) > 0 && (
+                          <p className="text-xs text-muted-foreground">Berat: {product.weight} {product.weightUom === 'gram' ? 'gram' : 'Kg'}</p>
+                        )}
+                      </div>
+                    </Card>
+                  </Link>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">Belum ada produk unggulan</p>
+          )}
         </div>
       </section>
 

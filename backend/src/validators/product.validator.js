@@ -22,6 +22,10 @@ const createProduct = [
     .optional()
     .isUUID()
     .withMessage('Valid category ID is required.'),
+  body('weightUom')
+    .optional()
+    .isIn(['kg', 'gram'])
+    .withMessage('Weight unit must be kg or gram.'),
   validate,
 ];
 
@@ -50,6 +54,10 @@ const updateProduct = [
     .optional()
     .isUUID()
     .withMessage('Valid category ID is required.'),
+  body('weightUom')
+    .optional()
+    .isIn(['kg', 'gram'])
+    .withMessage('Weight unit must be kg or gram.'),
   validate,
 ];
 
