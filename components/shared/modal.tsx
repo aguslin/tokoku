@@ -10,7 +10,7 @@ interface ModalProps {
   children: ReactNode;
   onClose: () => void;
   footer?: ReactNode;
-  size?: 'sm' | 'md' | 'lg' | 'xl';
+  size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
   closeOnBackdropClick?: boolean;
 }
 
@@ -19,6 +19,8 @@ const sizeStyles = {
   md: 'sm:max-w-md',
   lg: 'sm:max-w-lg',
   xl: 'sm:max-w-xl',
+  '2xl': 'sm:max-w-2xl',
+  '3xl': 'sm:max-w-3xl',
 };
 
 export const Modal = ({

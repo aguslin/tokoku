@@ -194,12 +194,12 @@ function PaymentStatusBadge({ status }: { status: string }) {
   );
 }
 
-function CrudModal({ isOpen, onClose, title, children, onSave, saving }: {
+function CrudModal({ isOpen, onClose, title, children, onSave, saving, size }: {
   isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode;
-  onSave: () => void; saving?: boolean;
+  onSave: () => void; saving?: boolean; size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl' | '3xl';
 }) {
   return (
-    <Modal isOpen={isOpen} title={title} onClose={onClose} size="lg"
+    <Modal isOpen={isOpen} title={title} onClose={onClose} size={size}
       footer={
         <>
           <Button variant="outline" onClick={onClose}>Batal</Button>
@@ -664,7 +664,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
          <div className="text-xs text-muted-foreground text-center py-2">{filtered.length} dari {(data || []).length} produk</div>
        </div>
 
-       <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Produk' : 'Tambah Produk'} onSave={handleSave} saving={saving}>
+       <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Produk' : 'Tambah Produk'} onSave={handleSave} saving={saving} size="2xl">
          <div className="space-y-3">
            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
              <InputField label="Nama" value={form.name} onChange={v => { setForm(f => ({ ...f, name: v })); if (!edit) setForm(f => ({ ...f, slug: v.toLowerCase().replace(/\s+/g, '-') })); }} />
