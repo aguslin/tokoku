@@ -33,7 +33,7 @@ After every `git push` to `main`, the agent MUST:
   ```
   git push origin feat/z.ai:main
   ```
-- GitHub token: `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`
+- GitHub token: Stored in remote, not committed. Check `git remote get-url origin`.
 - Database URL for Neon (without `channel_binding`): `postgresql://neondb_owner:npg_EZ91WmoXrwyf@ep-noisy-bonus-aokfl0ci-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb?sslmode=require`
 
 ## Architecture
