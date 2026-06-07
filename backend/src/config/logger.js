@@ -1,8 +1,18 @@
 const winston = require('winston');
 const path = require('path');
 const util = require('util');
+const fs = require('fs');
 
+const isServerless = process.env.NEXT_PUBLIC_VERCEL || process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
 const logDir = path.resolve(__dirname, '../../storage/logs');
+const canWriteFiles = !isServerless && (() => {
+  try {
+    if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 
 const levels = {
   error: 0,
@@ -61,18 +71,23 @@ const consoleFormat = winston.format.combine(
 
 const transports = [
   new winston.transports.Console({ format: consoleFormat }),
-  new winston.transports.File({
-    filename: path.join(logDir, 'error.log'),
-    level: 'error',
-    maxsize: 5242880,
-    maxFiles: 5,
-  }),
-  new winston.transports.File({
-    filename: path.join(logDir, 'combined.log'),
-    maxsize: 5242880,
-    maxFiles: 5,
-  }),
 ];
+
+if (canWriteFiles) {
+  transports.push(
+    new winston.transports.File({
+      filename: path.join(logDir, 'error.log'),
+      level: 'error',
+      maxsize: 5242880,
+      maxFiles: 5,
+    }),
+    new winston.transports.File({
+      filename: path.join(logDir, 'combined.log'),
+      maxsize: 5242880,
+      maxFiles: 5,
+    }),
+  );
+}
 
 const logger = winston.createLogger({
   level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
