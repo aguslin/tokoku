@@ -22,12 +22,12 @@ After every `git push` to `main`, the agent MUST:
 
 ## Key Conventions
 
-- **CRITICAL: Git author MUST be `aguslin@users.noreply.github.com`** — Every commit MUST use:
+- **CRITICAL: Git author MUST use these exact values** — Every commit MUST use:
   ```
-  git config user.email "aguslin@users.noreply.github.com"
+  git config user.email "agussukiawan@gmail.com"
   git config user.name "aguslin"
   ```
-  This matches the GitHub repo owner (`aguslin`) and prevents Vercel deployment blocks on Hobby Plan. Never use other emails.
+  The email is verified on the GitHub account `aguslin`. The name must be `aguslin` (lowercase, matching GitHub username) to ensure Vercel accepts the deployment on Hobby Plan. Never use other emails or names.
 - Always push from `/home/z/my-project/tokoku` directory.
 - Branch mapping: local `feat/z.ai` → remote `main` via:
   ```
