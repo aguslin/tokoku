@@ -5,10 +5,9 @@
       "framework": "nextjs"
     },
     "backend": {
-      "root": "backend",
       "routePrefix": "/_/backend",
       "builder": "@vercel/node",
-      "entrypoint": "api/[...path].js"
+      "entrypoint": "vercel-backend.js"
     }
   }
 }
