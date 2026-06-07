@@ -111,23 +111,6 @@ export default function PreLoginPage() {
         </div>
       </section>
 
-      {/* Categories */}
-      <section className="py-12 lg:py-16 border-b border-border">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-3xl font-bold text-foreground mb-8">Belanja Berdasarkan Kategori</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {MOCK_CATEGORIES.map((cat) => (
-              <div
-                key={cat.id}
-                className="p-4 rounded-lg border border-border hover:border-primary/50 hover:bg-primary/5 transition-all cursor-pointer text-center"
-              >
-                <div className="text-4xl mb-2">{cat.icon}</div>
-                <p className="font-medium text-foreground text-sm">{cat.name}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
       {/* Flash Sale */}
       <section className="py-12 lg:py-16 border-b border-border bg-secondary/5">
