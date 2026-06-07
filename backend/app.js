@@ -1,53 +1,68 @@
 const express = require('express');
-const helmet = require('helmet');
 const cors = require('cors');
-const morgan = require('morgan');
-const compression = require('compression');
 const cookieParser = require('cookie-parser');
 const path = require('path');
-const swaggerUi = require('swagger-ui-express');
 
 const appConfig = require('./src/config/app');
 const corsOptions = require('./src/config/cors');
 const logger = require('./src/config/logger');
-const swaggerSpec = require('./src/docs/swagger');
 const ApiError = require('./src/utils/ApiError');
 const ApiResponse = require('./src/utils/ApiResponse');
 const { HTTP_STATUS } = require('./src/constants');
 
+const isVercel = !!process.env.VERCEL;
+
 const app = express();
 
-app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+// Skip helmet on Vercel — it manipulates raw ServerResponse headers
+// in ways incompatible with Vercel's serverless function response objects.
+// Vercel already handles security headers at the edge.
+if (!isVercel) {
+  const helmet = require('helmet');
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
+}
+
 app.use(cors(corsOptions));
-app.use(compression());
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-const morganFormat = appConfig.isDev ? 'dev' : 'combined';
-app.use(
-  morgan(morganFormat, {
-    stream: { write: (message) => logger.http(message.trim()) },
-  }),
-);
+// Skip morgan on Vercel — it needs req.socket.remoteAddress which
+// may not be available. Vercel has its own request logging.
+if (!isVercel) {
+  const morgan = require('morgan');
+  const morganFormat = appConfig.isDev ? 'dev' : 'combined';
+  app.use(
+    morgan(morganFormat, {
+      stream: { write: (message) => logger.http(message.trim()) },
+    }),
+  );
+}
 
-app.use(
-  '/uploads',
-  express.static(path.resolve(__dirname, 'storage', 'uploads'), {
-    maxAge: '1d',
-    etag: true,
-  }),
-);
+// Only serve static uploads when not on Vercel (read-only filesystem)
+if (!isVercel) {
+  app.use(
+    '/uploads',
+    express.static(path.resolve(__dirname, 'storage', 'uploads'), {
+      maxAge: '1d',
+      etag: true,
+    }),
+  );
+}
 
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  explorer: true,
-  customSiteTitle: 'Marketplace API Docs',
-}));
-
-app.get('/api-docs.json', (_req, res) => {
-  res.setHeader('Content-Type', 'application/json');
-  res.send(swaggerSpec);
-});
+// Skip swagger-ui on Vercel (not needed in serverless)
+if (!isVercel) {
+  const swaggerUi = require('swagger-ui-express');
+  const swaggerSpec = require('./src/docs/swagger');
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    explorer: true,
+    customSiteTitle: 'Marketplace API Docs',
+  }));
+  app.get('/api-docs.json', (_req, res) => {
+    res.setHeader('Content-Type', 'application/json');
+    res.send(swaggerSpec);
+  });
+}
 
 const routes = require('./src/routes');
 app.use('/api/v1', routes);

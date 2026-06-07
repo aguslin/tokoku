@@ -1,3 +1,4 @@
+const path = require('path');
 const swaggerJsdoc = require('swagger-jsdoc');
 
 const options = {
@@ -86,7 +87,7 @@ const options = {
       { name: 'Uploads', description: 'File uploads' },
     ],
   },
-  apis: ['./src/routes/*.js', './src/docs/*.yml', './src/docs/*.yaml'],
+  apis: [path.resolve(__dirname, '../routes/*.js')],
 };
 
 const swaggerSpec = swaggerJsdoc(options);
