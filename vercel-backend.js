@@ -72,5 +72,13 @@ module.exports = async (req, res) => {
     // DB connection failed — continue anyway, let the request handle the error
   }
 
+  // Vercel experimentalServices routePrefix is NOT stripped from req.url.
+  // Express routes are mounted at /api/v1, but Vercel sends the full path
+  // including /_/backend prefix. Strip it here so Express sees the correct path.
+  const prefix = '/_/backend';
+  if (req.url && req.url.startsWith(prefix)) {
+    req.url = req.url.slice(prefix.length) || '/';
+  }
+
   return app(req, res);
 };
