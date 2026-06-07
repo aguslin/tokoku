@@ -22,6 +22,12 @@ After every `git push` to `main`, the agent MUST:
 
 ## Key Conventions
 
+- **CRITICAL: Git author MUST be `agussukiawan@gmail.com`** — Every commit MUST use:
+  ```
+  git config user.email "agussukiawan@gmail.com"
+  git config user.name "Agus Sukiawan"
+  ```
+  Using any other email will cause the GitHub account to be BLOCKED. Never commit with the default/root email.
 - Always push from `/home/z/my-project/tokoku` directory.
 - Branch mapping: local `feat/z.ai` → remote `main` via:
   ```
