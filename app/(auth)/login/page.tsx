@@ -38,7 +38,13 @@ export default function LoginPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
-      const json = await res.json();
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        const text = await res.text().catch(() => '');
+        throw new Error(`Server error (${res.status}): ${text.slice(0, 100)}`);
+      }
       if (json.success && json.data) {
         loginSuccess(json.data);
         const token = json.data.tokens.accessToken;
