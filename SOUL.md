@@ -34,14 +34,16 @@ After every `git push` to `main`, the agent MUST:
 
 - Frontend: Next.js 16 (App Router) — served at `/`
 - Backend: Express.js + Sequelize — served at `/_/backend` via `vercel.json experimentalServices`
-- Backend API handler: `backend/api/[...path].js`
+- Backend API handler: `vercel-backend.js` (at project root)
 - Frontend API base URL: `/_/backend/api/v1` (or `NEXT_PUBLIC_API_URL` env)
 
 ## Known Vercel Serverless Constraints
 
 - **No pnpm** — Project uses `npm` (not `pnpm`). Never commit `pnpm-lock.yaml` or `pnpm-workspace.yaml`.
 - **Read-only filesystem** — Winston file transports must be skipped (detected via `process.env.VERCEL`).
-- **Module resolution** — Root `package.json` includes backend deps (`pg`, `sequelize`, `express`, etc.) so `@vercel/node` builder can resolve them.
+- **Module resolution** — Root `package.json` includes backend deps (`pg`, `sequelize`, `express`, etc.) so `@vercel/node` builder can resolve them. The handler (`vercel-backend.js`) is at the project root, NOT inside `backend/`, so `@vercel/node` installs deps from root `package.json`.
+- **No `"root": "backend"` in vercel.json** — The backend service config must NOT have a `"root"` field; the entrypoint is `vercel-backend.js` at the project root.
+- **Explicit `require('pg')` and `require('pg-hstore')`** — Sequelize loads dialect packages dynamically (by string), which `@vercel/ncc` cannot trace. The handler must explicitly require these packages so ncc includes them in the bundle.
 - **No `server.js`** — Backend runs as serverless function, not a long-running server.
 - **Install lockfile consistency** — Always run `npm install` and commit the updated `package-lock.json` after modifying `package.json`.
 - **No helmet** — `helmet` calls `ServerResponse.removeHeader()` which crashes on Vercel's serverless response object. Conditionally skip via `if (!process.env.VERCEL)`.
