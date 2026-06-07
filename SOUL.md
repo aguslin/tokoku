@@ -1,4 +1,4 @@
-# SOUL.md — Agent Behavioral Rules for tokoku Project
+# SOUL.md  — Agent Behavioral Rules for tokoku Project
 
 ## Push-Verify-Fix Loop (MANDATORY)
 
