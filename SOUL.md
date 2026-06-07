@@ -44,3 +44,8 @@ After every `git push` to `main`, the agent MUST:
 - **Module resolution** — Root `package.json` includes backend deps (`pg`, `sequelize`, `express`, etc.) so `@vercel/node` builder can resolve them.
 - **No `server.js`** — Backend runs as serverless function, not a long-running server.
 - **Install lockfile consistency** — Always run `npm install` and commit the updated `package-lock.json` after modifying `package.json`.
+- **No helmet** — `helmet` calls `ServerResponse.removeHeader()` which crashes on Vercel's serverless response object. Conditionally skip via `if (!process.env.VERCEL)`.
+- **No morgan** — `morgan` needs `req.socket.remoteAddress` which may not be available on Vercel. Conditionally skip.
+- **No express.static for uploads** — Vercel filesystem is read-only. Skip upload static file serving.
+- **No swagger-ui-express** — Swagger UI not needed on Vercel serverless. Conditionally skip.
+- **dotenv path** — Always use `dotenv.config({ path: require('path').resolve(__dirname, '../../.env') })` with explicit absolute paths, not relative CWD-based paths.
