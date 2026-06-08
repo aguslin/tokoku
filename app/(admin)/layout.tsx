@@ -1,14 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   ShoppingCart, ArrowLeft, LayoutDashboard, ShoppingBag, Users,
-  Package, FolderTree, Ticket, Key, CheckCircle, XCircle
+  Package, FolderTree, Ticket
 } from 'lucide-react';
 import { Toaster } from 'sonner';
-import { getAdminToken, setAdminToken, clearAdminToken } from '@/lib/api/admin';
 import type { ToasterProps } from 'sonner';
 
 const NAV_ITEMS = [
@@ -22,27 +21,6 @@ const NAV_ITEMS = [
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [tokenInput, setTokenInput] = useState('');
-  const [showTokenInput, setShowTokenInput] = useState(false);
-  const [hasToken, setHasToken] = useState(false);
-
-  useEffect(() => {
-    setHasToken(!!getAdminToken());
-  }, []);
-
-  const handleSetToken = () => {
-    if (tokenInput.trim()) {
-      setAdminToken(tokenInput.trim());
-      setHasToken(true);
-      setShowTokenInput(false);
-      setTokenInput('');
-    }
-  };
-
-  const handleClearToken = () => {
-    clearAdminToken();
-    setHasToken(false);
-  };
 
   return (
     <div className="min-h-screen bg-background flex">
@@ -55,33 +33,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             <span className="font-bold text-lg text-foreground">Shop</span>
           </Link>
           <p className="text-xs text-muted-foreground mt-1">Admin Panel</p>
-        </div>
-
-        <div className="px-4 pt-3 pb-1">
-          <button onClick={() => setShowTokenInput(!showTokenInput)}
-            className="flex items-center gap-2 text-xs text-muted-foreground hover:text-primary transition-colors w-full">
-            <Key className="w-3 h-3" />
-            {hasToken ? 'API Token (set)' : 'API Token (not set)'}
-            {hasToken ? <CheckCircle className="w-3 h-3 text-success" /> : <XCircle className="w-3 h-3 text-destructive" />}
-          </button>
-          {showTokenInput && (
-            <div className="mt-2 flex gap-1">
-              <input type="text" placeholder="Paste Bearer token..."
-                value={tokenInput}
-                onChange={e => setTokenInput(e.target.value)}
-                className="flex-1 px-2 py-1 text-xs border border-input rounded focus:outline-none focus:ring-1 focus:ring-primary" />
-              <button onClick={handleSetToken}
-                className="px-2 py-1 text-xs bg-primary text-primary-foreground rounded hover:bg-primary/90">
-                Set
-              </button>
-              {hasToken && (
-                <button onClick={handleClearToken}
-                  className="px-2 py-1 text-xs bg-destructive text-destructive-foreground rounded hover:bg-destructive/90">
-                  Clear
-                </button>
-              )}
-            </div>
-          )}
         </div>
 
         <nav className="flex-1 p-4 space-y-1">
@@ -118,16 +69,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
           <span className="font-bold text-sm text-foreground">Shop Admin</span>
         </Link>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setShowTokenInput(!showTokenInput)}
-            className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors">
-            <Key className="w-4 h-4" />
-          </button>
-          <Link href="/"
-            className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors">
-            <ArrowLeft className="w-4 h-4" />
-          </Link>
-        </div>
+        <Link href="/"
+          className="p-1.5 rounded-lg text-muted-foreground hover:bg-primary/5 hover:text-primary transition-colors">
+          <ArrowLeft className="w-4 h-4" />
+        </Link>
       </div>
 
       {/* Mobile bottom tab navigation */}
