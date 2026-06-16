@@ -47,8 +47,8 @@ Browser
 
 | Role | Email | Password |
 |------|-------|----------|
-| Admin | admin@mail.com | Admin@123 |
-| User | user@mail.com | User123! |
+| Admin | admin@marketplace.com | Admin123! |
+| User | user@marketplace.com | User123! |
 
 ## Token Storage
 

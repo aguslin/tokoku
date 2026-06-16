@@ -72,6 +72,14 @@ module.exports = (sequelize, DataTypes) => {
     courierService: {
       type: DataTypes.STRING,
     },
+    courierServiceId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'courier_services',
+        key: 'id',
+      },
+    },
     trackingNumber: {
       type: DataTypes.STRING,
     },
@@ -96,6 +104,7 @@ module.exports = (sequelize, DataTypes) => {
     Order.belongsTo(db.User, { foreignKey: 'userId' });
     Order.belongsTo(db.Address, { foreignKey: 'addressId' });
     Order.belongsTo(db.Courier, { foreignKey: 'courierId' });
+    Order.belongsTo(db.CourierService, { foreignKey: 'courierServiceId' });
     Order.hasMany(db.OrderItem, { foreignKey: 'orderId' });
     Order.hasMany(db.Payment, { foreignKey: 'orderId' });
     Order.hasOne(db.Shipment, { foreignKey: 'orderId' });

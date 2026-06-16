@@ -4,7 +4,8 @@ import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard, Users, ShoppingBag, Package, FolderTree, Ticket,
-  Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown, Loader2, Banknote, Image as ImageIcon
+  Plus, Pencil, Trash2, Eye, Search, AlertCircle, X, Check, ArrowUpDown, Loader2, Banknote, Image as ImageIcon,
+  Warehouse as WarehouseIcon, MapPin
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/shared/button';
@@ -13,13 +14,14 @@ import { Modal } from '@/components/shared/modal';
 import { adminApi } from '@/lib/api/admin';
 import { useOrderStore } from '@/lib/store';
 
-type Tab = 'users' | 'categories' | 'products' | 'orders' | 'vouchers';
+type Tab = 'users' | 'categories' | 'products' | 'orders' | 'vouchers' | 'warehouses';
 
 const TABS: { id: Tab; label: string; icon: any }[] = [
   { id: 'users', label: 'Pengguna', icon: Users },
   { id: 'categories', label: 'Kategori', icon: FolderTree },
   { id: 'products', label: 'Produk', icon: Package },
   { id: 'orders', label: 'Pesanan', icon: ShoppingBag },
+  { id: 'warehouses', label: 'Gudang', icon: WarehouseIcon },
   { id: 'vouchers', label: 'Voucher', icon: Ticket },
 ];
 
@@ -65,6 +67,18 @@ const PAYMENT_STATUS_STYLES: Record<string, string> = {
 
 const ORDER_STATUSES = ['pending', 'confirmed', 'processing', 'shipped', 'cancelled'];
 
+// Format a raw numeric string with Indonesian thousand separators (dots), e.g. "280000" -> "280.000".
+// Always uses the id-ID locale so the dots appear regardless of the runtime's default locale.
+function formatRibuan(value: string | number | null | undefined): string {
+  if (value === null || value === undefined || value === '') return '';
+  const str = String(value);
+  const hasDecimal = str.includes('.');
+  const [intPart, decPart] = str.replace(/[^0-9.]/g, '').split('.');
+  if (intPart === '' && !hasDecimal) return '';
+  const intFmt = intPart ? Number(intPart).toLocaleString('id-ID') : '0';
+  return hasDecimal ? `${intFmt},${(decPart || '')}` : intFmt;
+}
+
 function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?: string }>) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
@@ -88,10 +102,11 @@ function useFetch<T>(fetcher: () => Promise<{ success: boolean; data?: T; error?
 
 interface UserData { id: string; name: string; email: string; phone: string; isActive: boolean; createdAt: string; }
 interface Category { id: string; name: string; slug: string; description: string; isActive: boolean; sortOrder: number; }
-interface Product { id: string; name: string; slug: string; price: number; stock: number; sku: string; isActive: boolean; isFeatured: boolean; categoryId: string; weight?: number; weightUom?: string; }
+interface Product { id: string; name: string; slug: string; description?: string; price: number; stock: number; sku: string; isActive: boolean; isFeatured: boolean; categoryId: string; weight?: number; weightUom?: string; ProductImages?: any[]; ProductVariants?: any[]; }
 interface OrderPayment { id: string; status: string; paymentMethodId: string; amount: number; paidAt: string | null; transactionId: string | null; metadata: { proofUrl?: string } | null; PaymentMethod?: { id: string; name: string; code: string } | null; }
 interface Order { id: string; orderNumber: string; status: string; total: number; subtotal: number; shippingCost: number; notes: string; createdAt: string; userId: string; paidAt: string | null; Payments?: OrderPayment[]; OrderItems?: { id: string; productId: string; productName: string; quantity: number; price: number; }[]; }
 interface Voucher { id: string; code: string; name: string; type: string; value: number; minOrder: number; maxDiscount: number | null; usageLimit: number | null; usedCount: number; startsAt: string; endsAt: string; isActive: boolean; }
+interface Warehouse { id: string; name: string; code: string; city: string; province: string; address?: string; latitude?: number | null; longitude?: number | null; isActive: boolean; }
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -103,6 +118,7 @@ function DashboardContent() {
   const products = useFetch<Product[]>(() => adminApi.get('/products'));
   const orders = useFetch<Order[]>(() => adminApi.get('/orders/all'));
   const vouchers = useFetch<Voucher[]>(() => adminApi.get('/vouchers'));
+  const warehouses = useFetch<Warehouse[]>(() => adminApi.get('/warehouses'));
 
   useEffect(() => {
     const t = searchParams.get('tab');
@@ -134,6 +150,7 @@ function DashboardContent() {
         {tab === 'categories' && <CategoriesSection {...categories} search={search} setSearch={setSearch} />}
         {tab === 'products' && <ProductsSection {...products} search={search} setSearch={setSearch} categories={categories.data || []} />}
         {tab === 'orders' && <OrdersSection {...orders} search={search} setSearch={setSearch} refetchProducts={products.refetch} />}
+        {tab === 'warehouses' && <WarehousesSection {...warehouses} search={search} setSearch={setSearch} />}
         {tab === 'vouchers' && <VouchersSection {...vouchers} search={search} setSearch={setSearch} />}
       </div>
     </main>
@@ -381,7 +398,12 @@ function CategoriesSection({ data, loading, error, refetch, search, setSearch }:
 
   const handleDelete = async () => {
     if (!deleteId) return;
-    await adminApi.del(`/categories/${deleteId}`);
+    const res = await adminApi.del(`/categories/${deleteId}`);
+    if (!res.success) {
+      toast.error(res.error || 'Gagal menghapus kategori');
+    } else {
+      toast.success('Kategori berhasil dihapus');
+    }
     setDeleteId(null); refetch();
   };
 
@@ -455,6 +477,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
    const [deleteId, setDeleteId] = useState<string | null>(null);
    const [uploading, setUploading] = useState(false);
    const [uploadedImages, setUploadedImages] = useState<string[]>([]);
+   const [variants, setVariants] = useState<{ name: string; price: string; stock: string }[]>([]);
 
    const filtered = (data || []).filter((p: Product) =>
      p.name?.toLowerCase().includes(search.toLowerCase()) || p.sku?.toLowerCase().includes(search.toLowerCase())
@@ -464,6 +487,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
      setEdit(null);
      setForm({ name: '', slug: '', description: '', price: '', comparePrice: '', stock: 0, sku: '', weight: '', weightUom: 'kg', isActive: true, isFeatured: false, categoryId: '' });
      setUploadedImages([]);
+     setVariants([]);
      setShow(true);
    };
 
@@ -472,8 +496,14 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
      setForm({ name: p.name, slug: p.slug, description: p.description || '', price: String(Number(p.price)), comparePrice: p.comparePrice ? String(Number(p.comparePrice)) : '', stock: p.stock, sku: p.sku || '', weight: p.weight ? String(Number(p.weight)) : '', weightUom: (p as any).weightUom || 'kg', isActive: p.isActive, isFeatured: p.isFeatured, categoryId: p.categoryId || '' });
      const existing = (p.ProductImages || []).map((i: any) => i.url);
      setUploadedImages(existing);
+     setVariants(((p as any).ProductVariants || []).map((v: any) => ({ name: v.name || '', price: v.price ? String(Number(v.price)) : '', stock: v.stock != null ? String(v.stock) : '' })));
      setShow(true);
    };
+
+   const addVariant = () => setVariants(prev => [...prev, { name: '', price: '', stock: '' }]);
+   const updateVariant = (i: number, key: 'name' | 'price' | 'stock', val: string) =>
+     setVariants(prev => prev.map((v, idx) => idx === i ? { ...v, [key]: val } : v));
+   const removeVariant = (i: number) => setVariants(prev => prev.filter((_, idx) => idx !== i));
 
    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
      const files = e.target.files;
@@ -535,6 +565,13 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
          isPrimary: i === 0,
          sortOrder: i,
        })),
+       variants: variants
+         .filter(v => v.name.trim())
+         .map(v => ({
+           name: v.name.trim(),
+           price: v.price ? Number(String(v.price).replace(/[^0-9.]/g, '')) : null,
+           stock: Number(String(v.stock).replace(/[^0-9]/g, '')) || 0,
+         })),
      };
      if (!form.categoryId) delete payload.categoryId;
      const res = edit
@@ -596,7 +633,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
                        </div>
                      </div>
                    </td>
-                   <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {Number(p.price).toLocaleString()}</td>
+                   <td className="px-3 py-2.5 hidden sm:table-cell font-medium">Rp {formatRibuan(Number(p.price))}</td>
                    <td className="px-3 py-2.5 hidden sm:table-cell">
                      <span className={p.stock < 10 ? 'text-destructive font-medium' : ''}>{p.stock}</span>
                    </td>
@@ -644,7 +681,7 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
              <div className="grid grid-cols-2 gap-2 text-sm">
                <div>
                  <p className="text-xs text-muted-foreground">Harga</p>
-                 <p className="font-semibold">Rp {Number(p.price).toLocaleString()}</p>
+                 <p className="font-semibold">Rp {formatRibuan(Number(p.price))}</p>
                </div>
                <div>
                  <p className="text-xs text-muted-foreground">Stok</p>
@@ -664,67 +701,128 @@ function ProductsSection({ data, loading, error, refetch, search, setSearch, cat
          <div className="text-xs text-muted-foreground text-center py-2">{filtered.length} dari {(data || []).length} produk</div>
        </div>
 
-       <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Produk' : 'Tambah Produk'} onSave={handleSave} saving={saving} size="2xl">
-         <div className="space-y-3">
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-             <InputField label="Nama" value={form.name} onChange={v => { setForm(f => ({ ...f, name: v })); if (!edit) setForm(f => ({ ...f, slug: v.toLowerCase().replace(/\s+/g, '-') })); }} />
-             <InputField label="SKU" value={form.sku} onChange={v => setForm(f => ({ ...f, sku: v }))} />
-           </div>
-           <InputField label="Slug" value={form.slug} onChange={v => setForm(f => ({ ...f, slug: v }))} />
-           <div>
-             <label className="block text-sm font-medium mb-1">Deskripsi</label>
-             <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-               rows={3}
-               className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 resize-vertical"
-               placeholder="Deskripsi produk..." />
-           </div>
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-             <InputField label="Harga" type="text" value={form.price ? Number(form.price.replace(/[^0-9.]/g, '')).toLocaleString('id-ID') : ''} onChange={v => setForm(f => ({ ...f, price: v.replace(/[^0-9]/g, '') }))} />
-             <InputField label="Harga Asli" type="text" value={form.comparePrice ? Number(form.comparePrice.replace(/[^0-9.]/g, '')).toLocaleString('id-ID') : ''} onChange={v => setForm(f => ({ ...f, comparePrice: v.replace(/[^0-9]/g, '') }))} />
-           </div>
-           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-             <InputField label="Stok" type="number" value={String(form.stock)} onChange={v => setForm(f => ({ ...f, stock: Number(v) }))} />
-             <div className="flex gap-2 items-end">
-               <div className="flex-1">
-                 <InputField label="Berat" type="text" value={form.weight ? Number(form.weight.replace(/[^0-9.]/g, '')).toLocaleString('id-ID') : ''} onChange={v => setForm(f => ({ ...f, weight: v.replace(/[^0-9.]/g, '') }))} />
+       <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Produk' : 'Tambah Produk'} onSave={handleSave} saving={saving} size="3xl">
+         <div className="space-y-5">
+           {/* Informasi dasar */}
+           <section className="space-y-3">
+             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Informasi Produk</h4>
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+               <InputField label="Nama" value={form.name} onChange={v => { setForm(f => ({ ...f, name: v })); if (!edit) setForm(f => ({ ...f, slug: v.toLowerCase().replace(/\s+/g, '-') })); }} />
+               <InputField label="SKU" value={form.sku} onChange={v => setForm(f => ({ ...f, sku: v }))} />
+             </div>
+             <InputField label="Slug" value={form.slug} onChange={v => setForm(f => ({ ...f, slug: v }))} />
+             <div>
+               <div className="flex items-center justify-between mb-1">
+                 <label className="block text-sm font-medium">Deskripsi</label>
+                 <span className="text-xs text-muted-foreground">{form.description.length} karakter</span>
                </div>
-               <div className="pb-0.5">
-                 <select value={form.weightUom} onChange={e => setForm(f => ({ ...f, weightUom: e.target.value }))}
-                   className="w-20 px-2 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-                   <option value="kg">Kg</option>
-                   <option value="gram">Gram</option>
-                 </select>
+               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                 rows={8}
+                 className="w-full px-3 py-2 border border-input rounded-lg text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y min-h-[180px] font-mono"
+                 placeholder="Tulis deskripsi lengkap produk di sini. Anda bisa menulis beberapa paragraf — kotak ini dapat diperbesar dan akan menampilkan teks panjang dengan nyaman." />
+             </div>
+             <div>
+               <label className="block text-sm font-medium mb-1">Kategori</label>
+               <select value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
+                 className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                 <option value="">Tanpa kategori</option>
+                 {(categories || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
+               </select>
+             </div>
+           </section>
+
+           {/* Harga & stok */}
+           <section className="space-y-3 border-t border-border pt-4">
+             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Harga &amp; Stok</h4>
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+               <div>
+                 <label className="block text-sm font-medium mb-1">Harga</label>
+                 <div className="relative">
+                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
+                   <input type="text" inputMode="numeric" value={formatRibuan(form.price)} onChange={e => setForm(f => ({ ...f, price: e.target.value.replace(/[^0-9]/g, '') }))}
+                     className="w-full pl-9 pr-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="0" />
+                 </div>
+               </div>
+               <div>
+                 <label className="block text-sm font-medium mb-1">Harga Asli (coret)</label>
+                 <div className="relative">
+                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
+                   <input type="text" inputMode="numeric" value={formatRibuan(form.comparePrice)} onChange={e => setForm(f => ({ ...f, comparePrice: e.target.value.replace(/[^0-9]/g, '') }))}
+                     className="w-full pl-9 pr-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="0" />
+                 </div>
                </div>
              </div>
-           </div>
-           <div>
-             <label className="block text-sm font-medium mb-1">Kategori</label>
-             <select value={form.categoryId} onChange={e => setForm(f => ({ ...f, categoryId: e.target.value }))}
-               className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
-               <option value="">Tanpa kategori</option>
-               {(categories || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
-             </select>
-           </div>
-           <div>
-             <label className="block text-sm font-medium mb-2">Gambar Produk</label>
-             <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+               <InputField label="Stok" type="number" value={String(form.stock)} onChange={v => setForm(f => ({ ...f, stock: Number(v) }))} />
+               <div>
+                 <label className="block text-sm font-medium mb-1">Berat</label>
+                 <div className="flex gap-2">
+                   <input type="text" inputMode="decimal" value={formatRibuan(form.weight)} onChange={e => setForm(f => ({ ...f, weight: e.target.value.replace(/[^0-9.]/g, '') }))}
+                     className="flex-1 px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" placeholder="0" />
+                   <select value={form.weightUom} onChange={e => setForm(f => ({ ...f, weightUom: e.target.value }))}
+                     className="w-24 px-2 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white">
+                     <option value="kg">Kg</option>
+                     <option value="gram">Gram</option>
+                   </select>
+                 </div>
+               </div>
+             </div>
+           </section>
+
+           {/* Varian */}
+           <section className="space-y-3 border-t border-border pt-4">
+             <div className="flex items-center justify-between">
+               <div>
+                 <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Varian</h4>
+                 <p className="text-xs text-muted-foreground mt-0.5">Mis. warna / ukuran. Kosongkan harga untuk memakai harga utama.</p>
+               </div>
+               <Button type="button" variant="outline" size="sm" icon={<Plus className="w-4 h-4" />} onClick={addVariant}>Tambah Varian</Button>
+             </div>
+             {variants.length === 0 ? (
+               <p className="text-xs text-muted-foreground bg-muted/40 rounded-lg p-3">Belum ada varian. Produk dijual sebagai item tunggal.</p>
+             ) : (
+               <div className="space-y-2">
+                 <div className="hidden sm:grid grid-cols-[1fr_120px_90px_32px] gap-2 px-1 text-xs font-medium text-muted-foreground">
+                   <span>Nama Varian</span><span>Harga (opsional)</span><span>Stok</span><span></span>
+                 </div>
+                 {variants.map((v, i) => (
+                   <div key={i} className="grid grid-cols-[1fr_120px_90px_32px] gap-2 items-center">
+                     <input value={v.name} onChange={e => updateVariant(i, 'name', e.target.value)} placeholder="cth. Merah - XL"
+                       className="px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                     <input value={formatRibuan(v.price)} onChange={e => updateVariant(i, 'price', e.target.value.replace(/[^0-9]/g, ''))} placeholder="Rp"
+                       inputMode="numeric" className="px-2 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                     <input value={v.stock} onChange={e => updateVariant(i, 'stock', e.target.value.replace(/[^0-9]/g, ''))} placeholder="0"
+                       inputMode="numeric" className="px-2 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+                     <button type="button" onClick={() => removeVariant(i)} className="w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 className="w-4 h-4" /></button>
+                   </div>
+                 ))}
+               </div>
+             )}
+           </section>
+
+           {/* Gambar */}
+           <section className="space-y-2 border-t border-border pt-4">
+             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Gambar Produk</h4>
+             <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                {uploadedImages.map((url, i) => (
                  <div key={i} className="relative w-full aspect-square rounded-lg border border-border overflow-hidden group">
                    <img src={url} alt="" className="w-full h-full object-cover" />
+                   {i === 0 && <span className="absolute bottom-1 left-1 text-[10px] bg-primary text-white px-1.5 py-0.5 rounded">Utama</span>}
                    <button onClick={() => removeImage(url)}
                      className="absolute top-1 right-1 w-6 h-6 bg-destructive text-white rounded-full flex items-center justify-center text-xs shadow-sm hover:bg-red-600">&times;</button>
                  </div>
                ))}
-               <label className="w-full aspect-square rounded-lg border-2 border-dashed border-border flex items-center justify-center cursor-pointer hover:border-primary transition-colors bg-white/50">
-                 {uploading ? <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /> : <Plus className="w-5 h-5 text-muted-foreground" />}
+               <label className="w-full aspect-square rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors bg-white/50 text-muted-foreground">
+                 {uploading ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Plus className="w-5 h-5" /><span className="text-[10px] mt-1">Tambah</span></>}
                  <input type="file" accept="image/*" multiple className="hidden" onChange={handleImageUpload} disabled={uploading} />
                </label>
              </div>
-           </div>
-           <div className="flex flex-col sm:flex-row gap-3">
-             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif</label>
-             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isFeatured} onChange={e => setForm(f => ({ ...f, isFeatured: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Unggulan</label>
-           </div>
+           </section>
+
+           <section className="flex flex-col sm:flex-row gap-4 border-t border-border pt-4">
+             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif (tampil di toko)</label>
+             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isFeatured} onChange={e => setForm(f => ({ ...f, isFeatured: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Produk Unggulan</label>
+           </section>
          </div>
        </CrudModal>
        <ConfirmDelete id={deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} />
@@ -1138,6 +1236,122 @@ function VouchersSection({ data, loading, error, refetch, search, setSearch }: a
             <InputField label="Tanggal Mulai" type="date" value={form.startsAt} onChange={v => setForm(f => ({ ...f, startsAt: v }))} />
           </div>
           <InputField label="Tanggal Berakhir" type="date" value={form.endsAt} onChange={v => setForm(f => ({ ...f, endsAt: v }))} />
+          <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif</label>
+        </div>
+      </CrudModal>
+      <ConfirmDelete id={deleteId} onClose={() => setDeleteId(null)} onConfirm={handleDelete} />
+    </div>
+  );
+}
+
+function WarehousesSection({ data, loading, error, refetch, search, setSearch }: any) {
+  const [show, setShow] = useState(false);
+  const [edit, setEdit] = useState<any>(null);
+  const emptyForm = { name: '', code: '', city: '', province: '', address: '', isActive: true };
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const filtered = (data || []).filter((w: Warehouse) =>
+    w.name?.toLowerCase().includes(search.toLowerCase()) ||
+    w.city?.toLowerCase().includes(search.toLowerCase()) ||
+    w.code?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEdit(null); setForm(emptyForm); setShow(true); };
+  const openEdit = (w: Warehouse) => { setEdit(w); setForm({ name: w.name, code: w.code, city: w.city, province: w.province, address: w.address || '', isActive: w.isActive }); setShow(true); };
+
+  const handleSave = async () => {
+    if (!form.name.trim() || !form.code.trim() || !form.city.trim() || !form.province.trim()) {
+      toast.error('Nama, kode, kota, dan provinsi wajib diisi');
+      return;
+    }
+    setSaving(true);
+    const res = edit
+      ? await adminApi.put(`/warehouses/${edit.id}`, form)
+      : await adminApi.post('/warehouses', form);
+    setSaving(false);
+    if (!res.success) { toast.error(res.error || 'Gagal menyimpan gudang'); return; }
+    toast.success(edit ? 'Gudang diperbarui' : 'Gudang ditambahkan');
+    setShow(false); refetch();
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    const res = await adminApi.del(`/warehouses/${deleteId}`);
+    if (!res.success) toast.error(res.error || 'Gagal menghapus gudang');
+    else toast.success('Gudang dihapus');
+    setDeleteId(null); refetch();
+  };
+
+  if (loading) return <TableSkeleton />;
+  if (error) return <ErrorState message={error} onRetry={refetch} />;
+
+  return (
+    <div className="space-y-2 sm:space-y-3">
+      <div className="bg-info/10 border border-info/20 rounded-lg p-3 flex items-start gap-2 text-xs text-foreground">
+        <MapPin className="w-4 h-4 text-info shrink-0 mt-0.5" />
+        <p>Tambahkan gudang / kantor cabang per kota. Saat ada pesanan masuk, sistem otomatis memilih gudang terdekat yang punya stok agar ongkir lebih murah. Koordinat akan terisi otomatis dari kota bila dikosongkan.</p>
+      </div>
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        <SearchBar value={search} onChange={setSearch} placeholder="Cari gudang / kota..." />
+        <Button size="sm" icon={<Plus className="w-4 h-4" />} onClick={openCreate} className="w-full sm:w-auto">Tambah Gudang</Button>
+      </div>
+      {!filtered.length ? <EmptyState message="Belum ada gudang" /> : (
+      <div className="bg-white rounded-lg border border-border overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs sm:text-sm">
+            <thead>
+              <tr className="border-b border-border bg-sky-50">
+                <th className="px-2 sm:px-3 py-2 sm:py-2.5 text-left font-semibold">Gudang</th>
+                <th className="px-2 sm:px-3 py-2 sm:py-2.5 text-left font-semibold hidden sm:table-cell">Kota</th>
+                <th className="px-2 sm:px-3 py-2 sm:py-2.5 text-left font-semibold hidden md:table-cell">Provinsi</th>
+                <th className="px-2 sm:px-3 py-2 sm:py-2.5 text-left font-semibold hidden md:table-cell">Status</th>
+                <th className="px-2 sm:px-3 py-2 sm:py-2.5 text-right font-semibold">Aksi</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((w: Warehouse) => (
+                <tr key={w.id} className="border-b border-border hover:bg-sky-50/50 transition-colors">
+                  <td className="px-2 sm:px-3 py-2 sm:py-2.5">
+                    <p className="font-medium text-foreground">{w.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">{w.code}</p>
+                    <p className="text-xs text-muted-foreground sm:hidden">{w.city}, {w.province}</p>
+                  </td>
+                  <td className="px-2 sm:px-3 py-2 sm:py-2.5 hidden sm:table-cell">{w.city}</td>
+                  <td className="px-2 sm:px-3 py-2 sm:py-2.5 text-muted-foreground hidden md:table-cell">{w.province}</td>
+                  <td className="px-2 sm:px-3 py-2 sm:py-2.5 hidden md:table-cell">
+                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${w.isActive ? 'bg-success/10 text-success' : 'bg-destructive/10 text-destructive'}`}>{w.isActive ? 'Aktif' : 'Nonaktif'}</span>
+                  </td>
+                  <td className="px-2 sm:px-3 py-2 sm:py-2.5 text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <button onClick={() => openEdit(w)} className="p-1.5 rounded-md hover:bg-primary/10 text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setDeleteId(w.id)} className="p-1.5 rounded-md hover:bg-destructive/10 text-muted-foreground hover:text-destructive"><Trash2 className="w-3.5 h-3.5" /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div className="px-2 sm:px-3 py-1.5 sm:py-2 text-xs text-muted-foreground border-t border-border">{filtered.length} dari {(data || []).length} gudang</div>
+      </div>
+      )}
+      <CrudModal isOpen={show} onClose={() => setShow(false)} title={edit ? 'Edit Gudang' : 'Tambah Gudang'} onSave={handleSave} saving={saving}>
+        <div className="space-y-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <InputField label="Nama Gudang" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} />
+            <InputField label="Kode" value={form.code} onChange={v => setForm(f => ({ ...f, code: v.toUpperCase() }))} />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <InputField label="Kota" value={form.city} onChange={v => setForm(f => ({ ...f, city: v }))} />
+            <InputField label="Provinsi" value={form.province} onChange={v => setForm(f => ({ ...f, province: v }))} />
+          </div>
+          <div>
+            <label className="block text-sm font-medium mb-1">Alamat</label>
+            <textarea value={form.address} rows={2} onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+              className="w-full px-3 py-2 border border-input rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/30" />
+          </div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.isActive} onChange={e => setForm(f => ({ ...f, isActive: e.target.checked }))} className="w-4 h-4 rounded border-input" /> Aktif</label>
         </div>
       </CrudModal>

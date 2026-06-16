@@ -148,9 +148,19 @@ const create = async (data, sellerId) => {
   }
 
   if (data.variants && Array.isArray(data.variants)) {
-    await ProductVariant.bulkCreate(
-      data.variants.map((v) => ({ ...v, productId: product.id })),
-    );
+    const validVariants = data.variants.filter((v) => v && v.name && String(v.name).trim());
+    if (validVariants.length) {
+      await ProductVariant.bulkCreate(
+        validVariants.map((v) => ({
+          name: String(v.name).trim(),
+          sku: v.sku || null,
+          price: v.price != null && v.price !== '' ? v.price : null,
+          stock: Number(v.stock) || 0,
+          isActive: v.isActive !== false,
+          productId: product.id,
+        })),
+      );
+    }
   }
 
   return getById(product.id);
@@ -196,6 +206,25 @@ const update = async (id, data) => {
         sortOrder: img.sortOrder || idx,
       })),
     );
+  }
+
+  // Replace variants when the client sends a variants array (full-replace semantics,
+  // matching how images are handled). Sending an empty array clears all variants.
+  if (data.variants && Array.isArray(data.variants)) {
+    await ProductVariant.destroy({ where: { productId: id } });
+    const validVariants = data.variants.filter((v) => v && v.name && String(v.name).trim());
+    if (validVariants.length) {
+      await ProductVariant.bulkCreate(
+        validVariants.map((v) => ({
+          name: String(v.name).trim(),
+          sku: v.sku || null,
+          price: v.price != null && v.price !== '' ? v.price : null,
+          stock: Number(v.stock) || 0,
+          isActive: v.isActive !== false,
+          productId: id,
+        })),
+      );
+    }
   }
 
   return getById(id);

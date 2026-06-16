@@ -31,6 +31,7 @@ module.exports = (sequelize, DataTypes) => {
   Courier.associate = (db) => {
     Courier.hasMany(db.Order, { foreignKey: 'courierId' });
     Courier.hasMany(db.Shipment, { foreignKey: 'courierId' });
+    Courier.hasMany(db.CourierService, { foreignKey: 'courierId' });
   };
 
   return Courier;

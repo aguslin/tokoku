@@ -1,15 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, CheckCircle, Truck, MapPin, Banknote, AlertCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Truck, MapPin, Banknote, AlertCircle, Zap, Package, Loader2, Warehouse } from 'lucide-react';
 import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { formatCurrency } from '@/lib/utils/currency';
-import { MOCK_ADDRESSES, MOCK_COURIERS } from '@/lib/mock-data/addresses';
+import { MOCK_ADDRESSES } from '@/lib/mock-data/addresses';
 import { useCartStore, useOrderStore } from '@/lib/store';
 import { paymentApi } from '@/lib/api/payment';
+
+interface ShipOption {
+  courierServiceId: string;
+  courier: string;
+  service: string;
+  code: string; // 'reguler' | 'instant'
+  tier: 'reguler' | 'instant';
+  eta: string | null;
+  cost: number;
+}
+interface ShipQuote {
+  origin: { warehouseId: string; name: string; city: string; province: string; distanceKm: number | null; fulfills: boolean } | null;
+  options: ShipOption[];
+}
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -17,14 +33,49 @@ export default function CheckoutPage() {
   const { addOrder, updateStatus: updateOrderStatus } = useOrderStore();
   const [step, setStep] = useState(1);
   const [selectedAddress, setSelectedAddress] = useState(MOCK_ADDRESSES[0].id);
-  const [selectedCourier, setSelectedCourier] = useState(MOCK_COURIERS[0].id);
   const [selectedPayment, setSelectedPayment] = useState('bca-va');
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  const [quote, setQuote] = useState<ShipQuote | null>(null);
+  const [loadingQuote, setLoadingQuote] = useState(false);
+  const [selectedServiceId, setSelectedServiceId] = useState<string | null>(null);
+
+  const address = MOCK_ADDRESSES.find(a => a.id === selectedAddress) || MOCK_ADDRESSES[0];
+
+  // Fetch a live shipping quote (nearest warehouse + Reguler/Instan options) whenever
+  // the destination address or cart changes.
+  useEffect(() => {
+    if (items.length === 0) return;
+    let cancelled = false;
+    setLoadingQuote(true);
+    fetch(`${API_BASE}/shipping/quote`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        city: address.city,
+        province: address.province,
+        items: items.map(i => ({ productId: i.productId, quantity: i.quantity })),
+      }),
+    })
+      .then(r => r.json())
+      .then(json => {
+        if (cancelled) return;
+        const q: ShipQuote = json.data || { origin: null, options: [] };
+        setQuote(q);
+        // Default to the cheapest reguler option.
+        const cheapest = [...q.options].sort((a, b) => a.cost - b.cost)[0];
+        setSelectedServiceId(prev => prev && q.options.some(o => o.courierServiceId === prev) ? prev : cheapest?.courierServiceId || null);
+      })
+      .catch(() => { if (!cancelled) setQuote({ origin: null, options: [] }); })
+      .finally(() => { if (!cancelled) setLoadingQuote(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedAddress, items.length]);
+
   const subtotal = cartTotal;
-  const courier = MOCK_COURIERS.find(c => c.id === selectedCourier) || MOCK_COURIERS[0];
-  const shipping = courier.price;
+  const selectedOption = quote?.options.find(o => o.courierServiceId === selectedServiceId) || null;
+  const shipping = selectedOption?.cost || 0;
   const total = subtotal + shipping;
 
   const paymentMethods = [
@@ -43,8 +94,10 @@ export default function CheckoutPage() {
     setPaymentError(null);
 
     try {
-      const address = MOCK_ADDRESSES.find(a => a.id === selectedAddress) || MOCK_ADDRESSES[0];
       const addrStr = `${address.street}, ${address.city}, ${address.province} ${address.zipCode}`;
+      const courierLabel = selectedOption
+        ? `${selectedOption.courier} - ${selectedOption.service}${quote?.origin ? ` (dari ${quote.origin.name})` : ''}`
+        : 'Pengiriman';
 
       const orderData = {
         items: items.map(i => ({
@@ -60,7 +113,7 @@ export default function CheckoutPage() {
         total,
         status: 'pending' as const,
         paymentMethod: paymentMethods.find(p => p.id === selectedPayment)?.name || 'BCA Virtual Account',
-        courier: courier.name,
+        courier: courierLabel,
         address: addrStr,
         estimatedDelivery: new Date(Date.now() + 3 * 86400000).toISOString(),
       };
@@ -163,24 +216,62 @@ export default function CheckoutPage() {
 
               {step >= 2 && (
                 <div className="space-y-3 pl-12">
-                  {MOCK_COURIERS.map((c) => (
-                    <label key={c.id} className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${selectedCourier === c.id ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <input
-                        type="radio"
-                        name="courier"
-                        checked={selectedCourier === c.id}
-                        onChange={() => setSelectedCourier(c.id)}
-                        className="w-4 h-4"
-                      />
-                      <div className="flex-1">
-                        <p className="font-semibold text-foreground">{c.name}</p>
-                        <p className="text-xs text-muted-foreground">{c.service} · Estimasi {c.est}</p>
+                  {/* Nearest-warehouse banner (UAT #7) */}
+                  {quote?.origin && (
+                    <div className="flex items-start gap-2 bg-primary/5 border border-primary/20 rounded-lg p-3">
+                      <Warehouse className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <div className="text-xs text-foreground">
+                        <p className="font-semibold">Dikirim dari gudang terdekat: {quote.origin.name}</p>
+                        <p className="text-muted-foreground">
+                          {quote.origin.city}, {quote.origin.province}
+                          {quote.origin.distanceKm != null && ` · ±${quote.origin.distanceKm} km dari alamat Anda`}
+                          {!quote.origin.fulfills && ' · sebagian stok'}
+                        </p>
                       </div>
-                      <span className="font-semibold text-foreground">{formatCurrency(c.price)}</span>
-                    </label>
-                  ))}
+                    </div>
+                  )}
+
+                  {loadingQuote && (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Menghitung ongkir...
+                    </div>
+                  )}
+
+                  {!loadingQuote && (['reguler', 'instant'] as const).map((tier) => {
+                    const tierOptions = (quote?.options || []).filter(o => o.tier === tier);
+                    if (!tierOptions.length) return null;
+                    return (
+                      <div key={tier} className="space-y-2">
+                        <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {tier === 'instant' ? <Zap className="w-3.5 h-3.5 text-warning" /> : <Package className="w-3.5 h-3.5" />}
+                          {tier === 'instant' ? 'Instan' : 'Reguler'}
+                        </div>
+                        {tierOptions.map((o) => (
+                          <label key={o.courierServiceId} className={`flex items-center gap-3 p-3 border rounded-lg cursor-pointer transition-all ${selectedServiceId === o.courierServiceId ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/40'}`}>
+                            <input
+                              type="radio"
+                              name="courier"
+                              checked={selectedServiceId === o.courierServiceId}
+                              onChange={() => setSelectedServiceId(o.courierServiceId)}
+                              className="w-4 h-4"
+                            />
+                            <div className="flex-1">
+                              <p className="font-semibold text-foreground">{o.courier} <span className="font-normal text-muted-foreground">· {o.service}</span></p>
+                              {o.eta && <p className="text-xs text-muted-foreground">Estimasi {o.eta}</p>}
+                            </div>
+                            <span className="font-semibold text-foreground">{formatCurrency(o.cost)}</span>
+                          </label>
+                        ))}
+                      </div>
+                    );
+                  })}
+
+                  {!loadingQuote && (quote?.options.length ?? 0) === 0 && (
+                    <p className="text-sm text-muted-foreground py-2">Opsi pengiriman tidak tersedia.</p>
+                  )}
+
                   {step === 2 && (
-                    <Button size="sm" onClick={() => setStep(3)} className="w-full">
+                    <Button size="sm" onClick={() => setStep(3)} className="w-full" disabled={!selectedOption}>
                       Lanjut ke Pembayaran
                     </Button>
                   )}

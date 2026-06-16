@@ -23,6 +23,14 @@ module.exports = (sequelize, DataTypes) => {
         key: 'id',
       },
     },
+    warehouseId: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: 'warehouses',
+        key: 'id',
+      },
+    },
     addressId: {
       type: DataTypes.UUID,
       allowNull: true,
@@ -68,6 +76,7 @@ module.exports = (sequelize, DataTypes) => {
   Shipment.associate = (db) => {
     Shipment.belongsTo(db.Order, { foreignKey: 'orderId' });
     Shipment.belongsTo(db.Courier, { foreignKey: 'courierId' });
+    Shipment.belongsTo(db.Warehouse, { foreignKey: 'warehouseId' });
     Shipment.belongsTo(db.Address, { foreignKey: 'addressId' });
   };
 
