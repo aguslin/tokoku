@@ -10,6 +10,8 @@ export interface CartItem {
   quantity: number;
   sellerName: string;
   sellerVerified: boolean;
+  variantId?: string;
+  variantName?: string;
 }
 
 export interface CartState {

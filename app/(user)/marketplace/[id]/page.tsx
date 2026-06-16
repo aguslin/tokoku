@@ -9,6 +9,7 @@ import { Button } from '@/components/shared/button';
 import { Card } from '@/components/shared/card';
 import { Badge } from '@/components/shared/badge';
 import { RatingStars } from '@/components/shared/rating-stars';
+import { toast } from 'sonner';
 import { formatCurrency } from '@/lib/utils/currency';
 import { useCartStore, useWishlistStore, useAuthStore } from '@/lib/store';
 
@@ -24,6 +25,11 @@ export default function ProductDetailPage() {
   const [quantity, setQuantity] = useState(1);
   const [selectedImage, setSelectedImage] = useState(0);
   const [addedToCart, setAddedToCart] = useState(false);
+  const [selectedVariant, setSelectedVariant] = useState<any>(null);
+
+  const variants: any[] = product?.ProductVariants || [];
+  const effectivePrice = selectedVariant?.price ? Number(selectedVariant.price) : Number(product?.price || 0);
+  const effectiveStock = selectedVariant ? Number(selectedVariant.stock) : Number(product?.stock || 0);
 
   useEffect(() => {
     const fetchProduct = async () => {
@@ -83,25 +89,34 @@ export default function ProductDetailPage() {
     );
   }
 
+  const buildCartItem = () => {
+    const imageUrl = product.ProductImages?.length > 0
+      ? product.ProductImages[0].url
+      : '/placeholder.svg';
+    return {
+      id: `${product.id}-${selectedVariant?.id || 'base'}`,
+      productId: product.id,
+      productName: selectedVariant ? `${product.name} (${selectedVariant.name})` : product.name,
+      productImage: imageUrl,
+      price: effectivePrice,
+      quantity,
+      sellerName: product.seller?.name || 'Toko',
+      sellerVerified: product.seller?.verified || false,
+      variantId: selectedVariant?.id,
+      variantName: selectedVariant?.name,
+    };
+  };
+
   const handleAddToCart = () => {
     if (!isAuthenticated) {
       router.push('/login');
       return;
     }
-    const imageUrl = product.ProductImages?.length > 0 
-      ? (product.ProductImages[0].url.startsWith('http') ? product.ProductImages[0].url : product.ProductImages[0].url)
-      : '/placeholder.svg';
-    
-    addItem({
-      id: `${product.id}-${Date.now()}`,
-      productId: product.id,
-      productName: product.name,
-      productImage: imageUrl,
-      price: Number(product.price),
-      quantity,
-      sellerName: product.seller?.name || 'Toko',
-      sellerVerified: product.seller?.verified || false,
-    });
+    if (variants.length > 0 && !selectedVariant) {
+      toast.error('Silakan pilih varian terlebih dahulu');
+      return;
+    }
+    addItem(buildCartItem());
     setAddedToCart(true);
     setTimeout(() => setAddedToCart(false), 2000);
   };
@@ -111,20 +126,11 @@ export default function ProductDetailPage() {
       router.push('/login');
       return;
     }
-    const imageUrl = product.ProductImages?.length > 0 
-      ? (product.ProductImages[0].url.startsWith('http') ? product.ProductImages[0].url : product.ProductImages[0].url)
-      : '/placeholder.svg';
-    
-    addItem({
-      id: `${product.id}-${Date.now()}`,
-      productId: product.id,
-      productName: product.name,
-      productImage: imageUrl,
-      price: Number(product.price),
-      quantity,
-      sellerName: product.seller?.name || 'Toko',
-      sellerVerified: product.seller?.verified || false,
-    });
+    if (variants.length > 0 && !selectedVariant) {
+      toast.error('Silakan pilih varian terlebih dahulu');
+      return;
+    }
+    addItem(buildCartItem());
     router.push('/checkout');
   };
 
@@ -216,16 +222,16 @@ export default function ProductDetailPage() {
               </p>
               <h1 className="text-2xl font-bold text-foreground">{product.name}</h1>
               <div className="flex items-center gap-3 mt-2">
-                <span className="text-sm text-muted-foreground">Stok: {product.stock}</span>
+                <span className="text-sm text-muted-foreground">Stok: {effectiveStock}</span>
                 {Number(product.weight) > 0 && (
-                  <span className="text-sm text-muted-foreground">Berat: {product.weight} {product.weightUom === 'gram' ? 'gram' : 'Kg'}</span>
+                  <span className="text-sm text-muted-foreground">Berat: {Number(product.weight).toLocaleString('id-ID')} {product.weightUom === 'gram' ? 'gram' : 'Kg'}</span>
                 )}
               </div>
             </div>
 
             <Card className="bg-primary/5 border-primary/20">
               <div className="flex items-baseline gap-3">
-                <span className="text-3xl font-bold text-primary">{formatCurrency(Number(product.price))}</span>
+                <span className="text-3xl font-bold text-primary">{formatCurrency(effectivePrice)}</span>
                 {product.comparePrice && Number(product.comparePrice) > 0 && (
                   <>
                     <span className="text-lg text-muted-foreground line-through">
@@ -241,6 +247,33 @@ export default function ProductDetailPage() {
               </div>
             </Card>
 
+            {variants.length > 0 && (
+              <div className="space-y-2">
+                <h3 className="font-semibold text-foreground">Pilih Varian {selectedVariant && <span className="text-sm font-normal text-muted-foreground">— {selectedVariant.name}</span>}</h3>
+                <div className="flex flex-wrap gap-2">
+                  {variants.map((v) => {
+                    const active = selectedVariant?.id === v.id;
+                    const outOfStock = Number(v.stock) <= 0;
+                    return (
+                      <button
+                        key={v.id}
+                        disabled={outOfStock}
+                        onClick={() => { setSelectedVariant(active ? null : v); setQuantity(1); }}
+                        className={`px-3 py-1.5 rounded-lg border text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
+                          active ? 'border-primary bg-primary/10 text-primary font-medium' : 'border-border hover:border-primary/50 text-foreground'
+                        }`}
+                      >
+                        {v.name}
+                        {v.price && Number(v.price) !== Number(product.price) && (
+                          <span className="ml-1 text-xs text-muted-foreground">{formatCurrency(Number(v.price))}</span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <div className="space-y-3">
               <h3 className="font-semibold text-foreground">Jumlah</h3>
               <div className="flex items-center gap-3">
@@ -252,13 +285,13 @@ export default function ProductDetailPage() {
                 </button>
                 <span className="w-10 text-center font-semibold">{quantity}</span>
                 <button
-                  onClick={() => setQuantity(Math.min(Number(product.stock), quantity + 1))}
+                  onClick={() => setQuantity(Math.min(effectiveStock || 1, quantity + 1))}
                   className="w-8 h-8 border border-border rounded flex items-center justify-center text-lg hover:bg-muted"
                 >
                   +
                 </button>
                 <span className="text-sm text-muted-foreground">
-                  Stok: {product.stock}
+                  Stok: {effectiveStock}
                 </span>
               </div>
             </div>

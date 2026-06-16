@@ -2,7 +2,7 @@ const db = require('../models');
 const ApiError = require('../utils/ApiError');
 const { getPagination, getPaginationMeta } = require('../helpers/pagination');
 
-const { Category } = db;
+const { Category, Product } = db;
 
 const getAll = async (query) => {
   const { page, limit, offset } = getPagination(query);
@@ -99,7 +99,7 @@ const update = async (id, data) => {
   return category;
 };
 
-const del = async (id) => {
+const remove = async (id) => {
   const category = await Category.findByPk(id);
   if (!category) {
     throw ApiError.notFound('Category not found');
@@ -107,8 +107,12 @@ const del = async (id) => {
 
   const childrenCount = await Category.count({ where: { parentId: id } });
   if (childrenCount > 0) {
-    throw ApiError.badRequest('Cannot delete category with subcategories');
+    throw ApiError.badRequest('Cannot delete a category that has subcategories. Delete or move them first.');
   }
+
+  // Detach any products from this category so they become uncategorized
+  // instead of pointing at a deleted category.
+  await Product.update({ categoryId: null }, { where: { categoryId: id } });
 
   await category.destroy();
   return { message: 'Category deleted successfully' };
@@ -140,6 +144,7 @@ module.exports = {
   getById,
   create,
   update,
-  delete: del,
+  remove,
+  delete: remove,
   getHierarchy,
 };

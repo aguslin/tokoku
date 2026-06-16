@@ -27,5 +27,7 @@ router.use('/reviews', require('./review.routes'));
 router.use('/wishlist', require('./wishlist.routes'));
 router.use('/notifications', require('./notification.routes'));
 router.use('/upload', require('./upload.routes'));
+router.use('/shipping', require('./shipping.routes'));
+router.use('/warehouses', require('./warehouse.routes'));
 
 module.exports = router;

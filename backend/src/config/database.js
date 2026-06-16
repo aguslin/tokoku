@@ -19,6 +19,12 @@ function parseDatabaseUrl(url) {
 
 const neonConfig = parseDatabaseUrl(process.env.DATABASE_URL);
 
+// When DATABASE_URL points at a cloud Postgres (e.g. Neon), SSL is required.
+// This lets us develop locally against Neon without Docker / local Postgres.
+const neonSsl = neonConfig
+  ? { ssl: { require: true, rejectUnauthorized: false } }
+  : undefined;
+
 module.exports = {
   development: {
     username: neonConfig?.username || process.env.DB_USER || 'postgres',
@@ -28,6 +34,7 @@ module.exports = {
     port: neonConfig?.port || parseInt(process.env.DB_PORT, 10) || 5432,
     dialect: 'postgres',
     logging: console.log,
+    ...(neonSsl ? { dialectOptions: neonSsl } : {}),
     seederStorage: 'sequelize',
     seederStorageTableName: 'SequelizeData',
   },

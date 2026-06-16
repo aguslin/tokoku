@@ -9,23 +9,31 @@ const createProduct = [
     .isLength({ max: 200 })
     .withMessage('Product name must not exceed 200 characters.'),
   body('description')
-    .trim()
-    .notEmpty()
-    .withMessage('Product description is required.'),
+    .optional({ values: 'falsy' })
+    .trim(),
   body('price')
     .isFloat({ min: 0 })
     .withMessage('Price must be a positive number.'),
   body('stock')
+    .optional()
     .isInt({ min: 0 })
     .withMessage('Stock must be a non-negative integer.'),
+  body('weight')
+    .optional({ values: 'falsy' })
+    .isFloat({ min: 0 })
+    .withMessage('Weight must be a non-negative number.'),
   body('categoryId')
-    .optional()
+    .optional({ values: 'falsy' })
     .isUUID()
     .withMessage('Valid category ID is required.'),
   body('weightUom')
     .optional()
     .isIn(['kg', 'gram'])
     .withMessage('Weight unit must be kg or gram.'),
+  body('variants')
+    .optional()
+    .isArray()
+    .withMessage('Variants must be an array.'),
   validate,
 ];
 
@@ -50,14 +58,22 @@ const updateProduct = [
     .optional()
     .isInt({ min: 0 })
     .withMessage('Stock must be a non-negative integer.'),
+  body('weight')
+    .optional({ values: 'falsy' })
+    .isFloat({ min: 0 })
+    .withMessage('Weight must be a non-negative number.'),
   body('categoryId')
-    .optional()
+    .optional({ values: 'falsy' })
     .isUUID()
     .withMessage('Valid category ID is required.'),
   body('weightUom')
     .optional()
     .isIn(['kg', 'gram'])
     .withMessage('Weight unit must be kg or gram.'),
+  body('variants')
+    .optional()
+    .isArray()
+    .withMessage('Variants must be an array.'),
   validate,
 ];
 
